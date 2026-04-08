@@ -8,7 +8,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: #efefef;
-      
       display: flex;
       align-items: flex-start; justify-content: center;
       min-height: 100vh;
@@ -215,9 +214,9 @@
   padding: 5px 10px; z-index: 9999;
   font-size: 12px; color: #666;
 ">
-  <button onclick="changeZoom(-0.1)" style="border:none;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">−</button>
+  <button onclick="changeZoom(-0.01)" style="border:none;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">−</button>
   <span id="zoomLabel" style="min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">75%</span>
-  <button onclick="changeZoom(+0.1)" style="border:none;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">+</button>
+  <button onclick="changeZoom(+0.01)" style="border:none;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">+</button>
 </div>
 
 <div id="zoom-wrap">
