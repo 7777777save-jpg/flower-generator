@@ -111,6 +111,7 @@
   </style>
 </head>
 <body>
+<audio id="bgm" src="Echos.m4a" loop></audio>
 <div id="card">
   <div id="sketch-host"></div>
 
@@ -219,6 +220,13 @@
         </div>
         <span class="val-display" id="valBoundW"></span>
       </div>
+      <div class="ctrl-row sub-row">
+        <span class="ctrl-label">↳ 圆滑</span>
+        <div class="slider-wrap">
+          <input type="range" id="slSmoothW" min="0" max="1" step="0.01" value="0">
+        </div>
+        <span class="val-display" id="valSmoothW"></span>
+      </div>
     </div>
 
     <div class="export-row">
@@ -252,6 +260,7 @@ function randomize() {
   window._setSlider(slStructW, 'valStructW', rnd(0,   1));
   window._setSlider(slBendW,   'valBendW',   rnd(0,   1));
   window._setSlider(slBoundW,  'valBoundW',  rnd(0,   1));
+  window._setSlider(slSmoothW, 'valSmoothW', rnd(0,   1));
 
   if (window._redraw) window._redraw();
 }
@@ -268,9 +277,11 @@ function exportPNG() {
 // 动画控制
 let animPlaying = false;
 function toggleAnim() {
+  const audio = document.getElementById('bgm');
   animPlaying = !animPlaying;
   document.getElementById('btnAnim').textContent = animPlaying ? '⏸ 暂停' : '▶ 播放';
   if (window._p5loop) window._p5loop(animPlaying);
+  if (animPlaying) { audio.play(); } else { audio.pause(); }
 }
 // ── 花瓣参数 ──────────────────────────────────────────────────
 const N = 5, orbit = 120, r0 = 40, R = 150;
@@ -338,6 +349,55 @@ const slPerturb = bindSlider('slPerturb', 'valPerturb');
 const slStructW = bindSlider('slStructW', 'valStructW', 0, 1, 0.6);
 const slBendW   = bindSlider('slBendW',   'valBendW',   0, 1, 0.2);
 const slBoundW  = bindSlider('slBoundW',  'valBoundW',  0, 1, 0.2);
+const slSmoothW = bindSlider('slSmoothW', 'valSmoothW', 0, 1, 0.0);
+
+// Chaikin 角点平滑算法
+// closed=true: 最后一点与第一点相连（中心形状闭合曲线）
+// closed=false: 开放路径（保留端点，不平滑头尾各一个控制点）
+function chaikin(pts, iters, closed) {
+  if (iters <= 0 || pts.length < 3) return pts;
+  let cur = pts;
+  for (let it = 0; it < iters; it++) {
+    const next = [];
+    const n = cur.length;
+    if (closed) {
+      for (let i = 0; i < n; i++) {
+        const a = cur[i], b = cur[(i + 1) % n];
+        next.push([a[0]*0.75 + b[0]*0.25, a[1]*0.75 + b[1]*0.25]);
+        next.push([a[0]*0.25 + b[0]*0.75, a[1]*0.25 + b[1]*0.75]);
+      }
+    } else {
+      // 开放路径：保留首尾端点不变
+      next.push(cur[0]);
+      for (let i = 0; i < n - 1; i++) {
+        const a = cur[i], b = cur[i + 1];
+        next.push([a[0]*0.75 + b[0]*0.25, a[1]*0.75 + b[1]*0.25]);
+        next.push([a[0]*0.25 + b[0]*0.75, a[1]*0.25 + b[1]*0.75]);
+      }
+      next.push(cur[n - 1]);
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+// 路径细分：每条边插入一个中点，让 Chaikin 有更多控制点
+function subdivide(pts, closed) {
+  if (pts.length < 2) return pts;
+  const out = [];
+  const n = pts.length;
+  const limit = closed ? n : n - 1;
+  for (let i = 0; i < limit; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    out.push(a);
+    out.push([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5]);
+  }
+  if (!closed) out.push(pts[n - 1]);
+  return out;
+}
+
+// 花蕊离屏缓冲（融合用）
+let stamenBuf = null;
 
 // ── p5 ───────────────────────────────────────────────────────
 // 计算三层实际强度（归一化权重 × perturb）
@@ -346,12 +406,15 @@ function getPerturbAmounts() {
   const sW  = parseFloat(slStructW.value);
   const beW = parseFloat(slBendW.value);
   const boW = parseFloat(slBoundW.value);
+  const smW = parseFloat(slSmoothW.value);
   const total = sW + beW + boW;
-  if (total < 0.001) return { structAmt: 0, bendAmt: 0, boundAmt: 0 };
+  const smoothAmt = smW * perturb;   // 圆滑独立于三层权重归一化，直接受 perturb 缩放
+  if (total < 0.001) return { structAmt: 0, bendAmt: 0, boundAmt: 0, smoothAmt };
   return {
     structAmt: perturb * sW  / total,
     bendAmt:   perturb * beW / total,
-    boundAmt:  perturb * boW / total
+    boundAmt:  perturb * boW / total,
+    smoothAmt,
   };
 }
 
@@ -359,6 +422,7 @@ new p5(function(p) {
 
   p.setup = function() {
     p.createCanvas(520, 520).parent('sketch-host');
+    stamenBuf = p.createGraphics(520, 520);
     p.noLoop();
     window._redraw  = () => p.redraw();
     window._p5loop  = (on) => { on ? p.loop() : p.noLoop(); };
@@ -417,26 +481,16 @@ new p5(function(p) {
   // structAmt: 低频扰动强度（大形变）
   // boundAmt:  高频扰动强度（细节纹理）
   function coreR(θ, base, axis, structAmt, boundAmt) {
-    let r;
+    // axis 0 → 圆形，axis 1 → 尖刺形（跳过方形）
+    let r = base;
 
-    // ① 形状轴变形
-    if (axis <= 0.5) {
-      const t = axis * 2;
-      const n = 2 + t * 8;
-      const cn = Math.pow(Math.abs(Math.cos(θ)), n);
-      const sn = Math.pow(Math.abs(Math.sin(θ)), n);
-      r = base / Math.pow(cn + sn, 1 / n);
-    } else {
-      const t = (axis - 0.5) * 2;
-      const n = 10 - t * 7;
-      const cn = Math.pow(Math.abs(Math.cos(θ)), n);
-      const sn = Math.pow(Math.abs(Math.sin(θ)), n);
-      const baseR = base / Math.pow(cn + sn, 1 / n);
+    if (axis > 0) {
+      // 三组不同频率的尖刺叠加，产生有机不规则感
       const spike =
-          0.15 * Math.pow(Math.max(0, Math.cos(3*θ + 0.7)), 4)
-        + 0.10 * Math.pow(Math.max(0, Math.cos(7*θ + 2.1)), 4)
-        + 0.08 * Math.pow(Math.max(0, Math.cos(5*θ - 0.9)), 4);
-      r = baseR * (1 + t * spike);
+          0.35 * Math.pow(Math.max(0, Math.cos(3 * θ + 0.7)), 3)
+        + 0.20 * Math.pow(Math.max(0, Math.cos(7 * θ + 2.1)), 4)
+        + 0.14 * Math.pow(Math.max(0, Math.cos(5 * θ - 0.9)), 4);
+      r *= (1 + axis * spike);
     }
 
     // ② structure 扰动（低频，大块起伏）
@@ -463,21 +517,28 @@ new p5(function(p) {
     const ease    = parseFloat(slEase.value);
     const sizeFac = parseFloat(slSize.value);
     const axis    = parseFloat(slAxis.value);
-    const { structAmt, bendAmt, boundAmt } = getPerturbAmounts();
+    const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
 
     const { base, rPetal, dOrbit } = computeCoreGeom(ease, sizeFac);
     const sample = makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit);
 
     const STEPS = 300;
-    const pts = Array.from({ length: STEPS }, (_, i) => {
+    let pts = Array.from({ length: STEPS }, (_, i) => {
       const θ = p.TWO_PI * i / STEPS;
       const r = sample(θ);
       return [cx + Math.cos(θ) * r, cy + Math.sin(θ) * r];
     });
 
+    // Chaikin 圆滑：iter = floor(smoothAmt × 5)，低值(<0.2)无变化
+    const iters = Math.min(4, Math.floor(smoothAmt * 5));
+    if (iters > 0) {
+      pts = subdivide(pts, true);
+      pts = chaikin(pts, iters, true);
+    }
+
     p.fill(255); p.noStroke();
     p.beginShape();
-    p.curveVertex(pts[STEPS-1][0], pts[STEPS-1][1]);
+    p.curveVertex(pts[pts.length-1][0], pts[pts.length-1][1]);
     for (const [x, y] of pts) p.curveVertex(x, y);
     p.curveVertex(pts[0][0], pts[0][1]);
     p.curveVertex(pts[1][0], pts[1][1]);
@@ -542,7 +603,7 @@ new p5(function(p) {
     const ease    = parseFloat(slEase.value);
     const sizeFac = parseFloat(slSize.value);
     const axis    = parseFloat(slAxis.value);
-    const { structAmt, bendAmt, boundAmt } = getPerturbAmounts();
+    const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
 
     const { base, rPetal, dOrbit, minBound } = computeCoreGeom(ease, sizeFac);
     const sample = makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit);
@@ -629,21 +690,25 @@ new p5(function(p) {
 
     p.fill(255); p.noStroke();
 
-    // ── 角度分布：多峰聚集分布 ───────────────────────────────────
-    // spread=0 → 均匀；spread>0 → 多个 cluster 中心形成密集区域
-    // cluster centers 由确定性方式生成（基于 count），不随机
-    const CLUSTER_COUNT = 3;
-    const σ = 0.55;   // 聚集宽度（弧度），约 ±31°
-    // 等间隔分布 cluster centers，相位偏移使其不与均匀分布完全重合
+    // ── 角度分布：多峰聚集分布（增强版）────────────────────────────
+    // spread > 0 → 花蕊聚向 cluster 中心（密集感）
+    // spread < 0 → 花蕊逃离 cluster 中心（反聚集，更均匀）
+    // 指数映射让效果更加非线性、有冲击感
+    const spreadAbs   = Math.abs(spread);
+    const spreadSign  = spread >= 0 ? 1 : -1;
+    const spreadPower = Math.pow(spreadAbs, 1.8) * spreadSign;
+
+    // 4 个 cluster，位置随 count 整体旋转，避免与花瓣固定对称
+    const CLUSTER_COUNT = 4;
+    const σ = 0.28;   // 较窄 Gaussian，cluster 更集中清晰
     const clusterCenters = Array.from({ length: CLUSTER_COUNT }, (_, k) =>
-      p.TWO_PI / CLUSTER_COUNT * k + 0.4
+      p.TWO_PI / CLUSTER_COUNT * k + count * 0.21
     );
 
     function density(θ) {
       let d = 0;
       for (const c of clusterCenters) {
         let dθ = θ - c;
-        // 环形距离
         while (dθ >  Math.PI) dθ -= p.TWO_PI;
         while (dθ < -Math.PI) dθ += p.TWO_PI;
         d += Math.exp(-(dθ * dθ) / (σ * σ));
@@ -651,22 +716,24 @@ new p5(function(p) {
       return d;
     }
 
-    // 间距权重：密度高 → 间距小（密）；density 越大间距越小
-    // intervalWeight = 1 / (1 + spread × density(θ))
-    // spread=0 → 全 1 → 均匀分布
+    // 权重正确方向：spread > 0 → cluster 附近权重高 → CDF 这段更多样本 → 更多花蕊
+    // spread < 0 → cluster 附近权重低 → 该区域稀疏
     function intervalWeight(θ) {
-      return 1 / (1 + spread * density(θ));
+      const d = density(θ);
+      if (spreadPower >= 0) {
+        return 1 + spreadPower * d * 3.5;
+      } else {
+        return Math.max(0.02, 1 + spreadPower * d * 3.5);
+      }
     }
 
     const rawAngles = [];
     {
-      // 用细分采样（360步）积分总权重，然后按比例确定每根花蕊的角度
       const SAMPLE = 360;
       const sampleWeights = Array.from({ length: SAMPLE }, (_, k) =>
         intervalWeight(p.TWO_PI / SAMPLE * k)
       );
       const totalW = sampleWeights.reduce((a, b) => a + b, 0);
-      // 累积分布函数 → 反向查找每根花蕊的角度
       const cdf = [];
       let acc = 0;
       for (let k = 0; k < SAMPLE; k++) {
@@ -674,7 +741,7 @@ new p5(function(p) {
         cdf.push(acc);
       }
       for (let i = 0; i < count; i++) {
-        const target = (i + 0.5) / count;   // 均匀采样 CDF
+        const target = (i + 0.5) / count;
         let idx = cdf.findIndex(v => v >= target);
         if (idx < 0) idx = SAMPLE - 1;
         rawAngles.push(p.TWO_PI / SAMPLE * idx - p.HALF_PI);
@@ -682,7 +749,9 @@ new p5(function(p) {
     }
 
     // ── 花蕊体 ────────────────────────────────────────────────────
-    const STEPS = 20;   // 更多步数保证曲线平滑
+    p.fill(255); p.noStroke();
+
+    const STEPS = 20;
     for (let i = 0; i < count; i++) {
       const θ      = rawAngles[i];
       const boundR = sample(θ);
@@ -692,17 +761,12 @@ new p5(function(p) {
       const endR   = Math.min(boundR + scaledExtra, Math.max(maxEnd, boundR + 1));
       const pathLen = endR - startR;
       const stepLen = pathLen / STEPS;
-      // 遮挡比例：startR（INNER×boundR）到 boundR 这段被中心形状覆盖
       const cutRatio = (boundR * INNER) / endR;
 
-      // bend：θ(t) = θ_base + bendAmt × noise(t × freq + seed)
-      // 每步方向角独立计算，产生真实连续弯曲（非对称，尖端明显偏移）
       const seed = θ * 1.7 + 0.9;
       const freq = 3.0;
-      // 强制放大系数 2.0，确保 bendAmt=0.33 时也有肉眼可见效果
       const bendScale = bendAmt * 2.0;
 
-      // 沿路径积分：每步用 θ(t) 决定前进方向
       const pxArr = [cx + Math.cos(θ) * startR];
       const pyArr = [cy + Math.sin(θ) * startR];
       const dirArr = [θ];
@@ -715,7 +779,6 @@ new p5(function(p) {
         dirArr.push(dir);
       }
 
-      // 构建左右轮廓：每点的垂直方向由当前切线决定
       const left = [], right = [];
       for (let s = 0; s <= STEPS; s++) {
         const t   = s / STEPS;
@@ -726,12 +789,19 @@ new p5(function(p) {
         right.push([pxArr[s] - nx * w, pyArr[s] - ny * w]);
       }
 
+      // 细分 + Chaikin 圆滑
+      const rightRev = right.slice().reverse();
+      let poly = [...left, ...rightRev];
+      const stamIters = Math.min(4, Math.floor(smoothAmt * 5));
+      if (stamIters > 0) {
+        poly = subdivide(poly, true);
+        poly = chaikin(poly, stamIters, true);
+      }
+
       p.beginShape();
-      for (const [x, y] of left)             p.vertex(x, y);
-      for (const [x, y] of right.reverse())  p.vertex(x, y);
+      for (const [x, y] of poly) p.vertex(x, y);
       p.endShape(p.CLOSE);
     }
-
   }
 
   p.draw = function() {
@@ -743,9 +813,10 @@ new p5(function(p) {
         return lo + (hi - lo) * (0.5 + 0.5 * Math.sin(t * speed + (phase || 0)));
       }
 
-      setSlider(slSize,    'valSize',    0.1);
+      setSlider(slSize,    'valSize',    osc(0,   0.5, 0.19, 0.0));
+      setSlider(slAxis,    'valAxis',    osc(0,   1.0, 0.17, 2.7));
       setSlider(slEase,    'valEase',    eMin + (eMax - eMin) * (0.5 + 0.5 * Math.sin(t * 0.22)));
-      setSlider(slCount,   'valCount',   Math.round(osc(2, 12, 0.09, 0.5)));  // 上限 12，减少卡帧
+      setSlider(slCount,   'valCount',   Math.round(osc(2, 12, 0.22, 0.5)));
       setSlider(slSpread,  'valSpread',  osc(0,   1.0, 0.28, 1.2));
       setSlider(slLength,  'valLength',  osc(0.6, 1.0, 0.31, 0.3));
       setSlider(slThick,   'valThick',   osc(0,   1.0, 0.24, 2.1));
@@ -755,6 +826,7 @@ new p5(function(p) {
       setSlider(slStructW, 'valStructW', osc(0.1, 1.0, 0.59, 1.0));
       setSlider(slBendW,   'valBendW',   osc(0.0, 1.0, 0.73, 2.3));
       setSlider(slBoundW,  'valBoundW',  osc(0.0, 1.0, 0.53, 3.1));
+      setSlider(slSmoothW, 'valSmoothW', osc(0.0, 1.0, 0.67, 1.8));
     }
 
     p.background(255);
