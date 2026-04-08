@@ -778,6 +778,14 @@ function getPerturbAmounts() {
 
 new p5(function(p) {
 
+  // 用原生 Image 加载 SVG，保持矢量精度（p.loadImage 会栅格化）
+  let stemImg = null;
+  (function() {
+    const img = new Image();
+    img.onload = () => { stemImg = img; };
+    img.src = '植物杆.svg';
+  })();
+
   p.setup = function() {
     p.createCanvas(520, 520).parent('sketch-host');
     stamenBuf = p.createGraphics(520, 520);
@@ -785,8 +793,16 @@ new p5(function(p) {
     window._redraw  = () => p.redraw();
     window._p5loop  = (on) => { on ? p.loop() : p.noLoop(); };
     p.frameRate(24);
-    // 页面加载后尝试自动播放（音频可能被浏览器拦截，等待用户首次交互）
+    // 页面加载后尝试自动播放
     tryAutoStart();
+    // DOM 布局完成后，把 canvas 高度扩展到与问卷面板等高
+    setTimeout(() => {
+      const qPanel = document.getElementById('questionnaire');
+      if (qPanel) {
+        const targetH = qPanel.offsetHeight;
+        if (targetH > 520) p.resizeCanvas(520, targetH);
+      }
+    }, 0);
   };
 
   // 工具：把值写入滑块并触发更新显示
@@ -1196,10 +1212,23 @@ new p5(function(p) {
     }
 
     p.background(255);
+
+    // 植物杆：背景层，花中心(260)为顶端锚点，底部贴 canvas 底边
+    if (stemImg) {
+      const stemH = p.height - 260;                     // 花中心到画布底部
+      const stemW = stemH * (44.300663 / 168.8680878);  // SVG 原始宽高比
+      p.drawingContext.drawImage(stemImg, p.width / 2 - stemW / 2, 260, stemW, stemH);
+    }
+
+    // 花固定在 y=260（原始 canvas 中心），canvas 高度变化时通过 translate 补偿
+    // drawPetals/drawStamens/drawCore 内部仍使用 p.height/2，无需修改
+    p.push();
+    p.translate(0, 260 - p.height / 2);
     const ease = parseFloat(slEase.value);
     drawPetals(ease);
     drawStamens();
     drawCore();
+    p.pop();
   };
 });
 </script>
