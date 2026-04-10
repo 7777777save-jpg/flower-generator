@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>送你一朵花</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #efefef;
+      display: flex;
+      align-items: center; justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #zoom-wrap {
+      transform-origin: top center;
+      margin: 0;
+    }
+    #questionnaire-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    #card {
+      background: white; border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.10); overflow: hidden;
+      display: flex; flex-direction: row;
+      align-items: stretch;
+    }
+    #sketch-host {
+      width: 520px;
+      min-height: 520px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    #sketch-host canvas {
+      display: block;
+    }
+    #controls {
+      width: 300px;
+      border-left: 1px solid #eee;
+      display: flex; flex-direction: column;
+      overflow: visible;
+    }
+    #controls-scroll {
+      flex: 1;
+      overflow: visible;
+    }
+    .ctrl-group {
+      border-top: 1px solid #eee;
+    }
+    .ctrl-group:first-child {
+      border-top: none;
+    }
+    .group-label {
+      padding: 10px 20px 4px;
+      font-size: 10px; color: #bbb;
+      letter-spacing: .1em; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .ctrl-row {
+      padding: 8px 20px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .ctrl-label {
+      font-size: 11px; color: #aaa;
+      white-space: nowrap; min-width: 80px;
+      letter-spacing: .04em;
+    }
+    .slider-wrap { flex: 1; position: relative; }
+    input[type=range] {
+      width: 100%; -webkit-appearance: none; appearance: none;
+      height: 3px; border-radius: 2px; outline: none; cursor: pointer;
+      background: linear-gradient(to right,
+        #222 0%, #222 var(--pct,0%), #ddd var(--pct,0%), #ddd 100%);
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #222; cursor: pointer; transition: transform .1s;
+    }
+    input[type=range]::-webkit-slider-thumb:active { transform: scale(1.3); }
+    input[type=range]::-moz-range-thumb {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #222; border: none; cursor: pointer;
+    }
+    .val-display {
+      font-size: 11px; color: #888;
+      font-variant-numeric: tabular-nums;
+      min-width: 32px; text-align: right;
+    }
+    .sub-row {
+      padding-top: 5px; padding-bottom: 5px;
+      padding-left: 32px;
+      background: #fafafa;
+    }
+    .sub-row .ctrl-label {
+      color: #ccc; font-size: 10px; min-width: 48px;
+    }
+    .sub-row input[type=range] {
+      height: 2px;
+    }
+    .sub-row .val-display {
+      color: #bbb; font-size: 10px;
+    }
+    .export-row {
+      padding: 16px 20px;
+      border-top: 1px solid #eee;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    #btnAnim, #btnExport, #btnRandom, #btnTest {
+      padding: 9px 0;
+      border: none; border-radius: 6px;
+      font-size: 12px; letter-spacing: .06em;
+      cursor: pointer; transition: background .15s;
+    }
+    #btnAnim   { background: #1a1a1a; color: #fff; }
+    #btnAnim:hover   { background: #444; }
+    #btnExport { background: #f0f0f0; color: #333; }
+    #btnExport:hover { background: #ddd; }
+    #btnRandom { background: #e8f0fe; color: #3a5fc8; }
+    #btnRandom:hover { background: #c5d5f8; }
+    #btnTest { background: #f5efe4; color: #8b6b36; }
+    #btnTest:hover { background: #e9dbc1; }
+    #info {
+      font-size: 10px; color: #ccc; text-align: center;
+      padding: 8px 20px 12px; letter-spacing: .03em;
+      margin-top: auto;
+    }
+
+    /* ── 人格问卷面板 ─────────────────────────────────────────── */
+    #questionnaire {
+      width: 420px;
+      min-height: 520px;
+      max-height: calc(100vh - 48px);
+      display: flex; flex-direction: column;
+      overflow-y: auto;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.10);
+    }
+    .panel-hidden { display: none !important; }
+    .q-header {
+      padding: 16px 20px 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .q-title {
+      font-size: 11px; font-weight: 600;
+      color: #888; letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .q-subtitle {
+      font-size: 10px; color: #bbb;
+      margin-top: 3px; letter-spacing: .03em;
+    }
+    .q-body {
+      flex: 1; overflow-y: auto;
+      padding: 8px 0;
+    }
+    .q-item {
+      padding: 10px 20px;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .q-item:last-child { border-bottom: none; }
+    .q-label {
+      font-size: 10px; color: #bbb;
+      letter-spacing: .06em; text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .q-text {
+      font-size: 11px; color: #555;
+      line-height: 1.5; margin-bottom: 8px;
+    }
+    .q-options {
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    .q-opt {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 6px 10px; border-radius: 6px;
+      border: 1.5px solid #eee;
+      cursor: pointer; transition: all .15s;
+      background: #fff;
+    }
+    .q-opt:hover {
+      border-color: #c5d5f8; background: #f4f7ff;
+    }
+    .q-opt.selected {
+      border-color: #3a5fc8; background: #e8f0fe;
+    }
+    .q-opt-key {
+      font-size: 10px; font-weight: 700;
+      color: #bbb; min-width: 14px;
+      letter-spacing: .04em; padding-top: 1px;
+      transition: color .15s;
+    }
+    .q-opt.selected .q-opt-key { color: #3a5fc8; }
+    .q-opt-text {
+      font-size: 11px; color: #666;
+      line-height: 1.45; transition: color .15s;
+    }
+    .q-opt.selected .q-opt-text { color: #3a5fc8; }
+    .q-footer {
+      padding: 14px 20px;
+      border-top: 1px solid #eee;
+    }
+    #btnSubmit {
+      width: 100%; padding: 10px 0;
+      border: none; border-radius: 6px;
+      background: #1a1a1a; color: #fff;
+      font-size: 12px; letter-spacing: .08em;
+      cursor: pointer; transition: background .15s;
+    }
+    #btnSubmit:hover { background: #444; }
+    #btnSubmit:disabled { background: #ccc; cursor: default; }
+    .q-progress {
+      font-size: 10px; color: #bbb;
+      text-align: center; margin-top: 8px;
+      letter-spacing: .04em;
+    }
+    .q-progress span {
+      color: #3a5fc8; font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+<audio id="bgm" src="Echos.m4a" loop></audio>
+
+<!-- 缩放控件 -->
+<div id="zoom-controls" style="
+  position: fixed; top: 14px; right: 18px;
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.88); backdrop-filter: blur(6px);
+  border: 1px solid #ddd; border-radius: 8px;
+  padding: 5px 10px; z-index: 9999;
+  font-size: 12px; color: #666;
+">
+  <button onclick="changeZoom(-0.01)" style="border:none;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">−</button>
+  <span id="zoomLabel" style="min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">75%</span>
+  <button onclick="changeZoom(+0.01)" style="border:none;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">+</button>
+</div>
+
+<div id="zoom-wrap">
+<div id="card">
+  <div id="sketch-host"></div>
+
+  <div id="controls">
+    <div id="controls-scroll">
+    <!-- ── 外形 ── -->
+    <div class="ctrl-group">
+      <div class="group-label">外形</div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">EASE  外形</span>
+        <div class="slider-wrap">
+          <input type="range" id="slEase" step="0.001">
+        </div>
+        <span class="val-display" id="valEase"></span>
+      </div>
+    </div>
+
+    <!-- ── 内型 ── -->
+    <div class="ctrl-group">
+      <div class="group-label">内型</div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">SIZE  大小</span>
+        <div class="slider-wrap">
+          <input type="range" id="slSize" min="0" max="1" step="0.01" value="0.35">
+        </div>
+        <span class="val-display" id="valSize"></span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">AXIS  形状轴</span>
+        <div class="slider-wrap">
+          <input type="range" id="slAxis" min="0" max="1" step="0.01" value="0">
+        </div>
+        <span class="val-display" id="valAxis"></span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">COUNT  数量</span>
+        <div class="slider-wrap">
+          <input type="range" id="slCount" min="0" max="40" step="1" value="8">
+        </div>
+        <span class="val-display" id="valCount"></span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">SPREAD  分布</span>
+        <div class="slider-wrap">
+          <input type="range" id="slSpread" min="-1" max="1" step="0.01" value="0">
+        </div>
+        <span class="val-display" id="valSpread"></span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">LENGTH  长度</span>
+        <div class="slider-wrap">
+          <input type="range" id="slLength" min="0" max="1" step="0.01" value="0.5">
+        </div>
+        <span class="val-display" id="valLength"></span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">THICK  粗细</span>
+        <div class="slider-wrap">
+          <input type="range" id="slThick" min="0" max="1" step="0.01" value="0.3">
+        </div>
+        <span class="val-display" id="valThick"></span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">TAPER  粗细变化</span>
+        <div class="slider-wrap">
+          <input type="range" id="slTaper" min="-2" max="2" step="0.01" value="0">
+        </div>
+        <span class="val-display" id="valTaper"></span>
+      </div>
+    </div>
+
+    <!-- ── 形状特性 ── -->
+    <div class="ctrl-group">
+      <div class="group-label">形状特性</div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">RHYTHM  节奏</span>
+        <div class="slider-wrap">
+          <input type="range" id="slRhythm" min="0" max="1" step="0.01" value="0">
+        </div>
+        <span class="val-display" id="valRhythm"></span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">PERTURB  扰动</span>
+        <div class="slider-wrap">
+          <input type="range" id="slPerturb" min="0" max="1" step="0.01" value="0">
+        </div>
+        <span class="val-display" id="valPerturb"></span>
+      </div>
+      <div class="ctrl-row sub-row">
+        <span class="ctrl-label">↳ 结构</span>
+        <div class="slider-wrap">
+          <input type="range" id="slStructW" min="0" max="1" step="0.01" value="0.6">
+        </div>
+        <span class="val-display" id="valStructW"></span>
+      </div>
+      <div class="ctrl-row sub-row">
+        <span class="ctrl-label">↳ 弯曲</span>
+        <div class="slider-wrap">
+          <input type="range" id="slBendW" min="0" max="1" step="0.01" value="0.2">
+        </div>
+        <span class="val-display" id="valBendW"></span>
+      </div>
+      <div class="ctrl-row sub-row">
+        <span class="ctrl-label">↳ 边界</span>
+        <div class="slider-wrap">
+          <input type="range" id="slBoundW" min="0" max="1" step="0.01" value="0.2">
+        </div>
+        <span class="val-display" id="valBoundW"></span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">ROUND  圆润</span>
+        <div class="slider-wrap">
+          <input type="range" id="slSmoothW" min="0" max="1" step="0.01" value="0">
+        </div>
+        <span class="val-display" id="valSmoothW"></span>
+      </div>
+    </div>
+    </div>
+
+    <div class="export-row">
+      <button id="btnAnim" onclick="toggleAnim()">▶ 播放</button>
+      <button id="btnRandom" onclick="randomize()">⚄ 随机</button>
+      <button id="btnTest" onclick="openQuestionnaire()">测试</button>
+      <button id="btnExport" onclick="exportPNG()">导出 PNG</button>
+    </div>
+
+  </div><!-- #controls -->
+
+</div><!-- #card -->
+</div><!-- #zoom-wrap -->
+
+<div id="questionnaire-screen" class="panel-hidden">
+  <div id="questionnaire">
+    <div class="q-header">
+      <div class="q-title">人格生成</div>
+      <div class="q-subtitle">回答 6 个问题，生成专属形态</div>
+    </div>
+    <div class="q-body" id="q-body"></div>
+    <div class="q-footer">
+      <button id="btnSubmit" onclick="submitPersonality()" disabled>提交</button>
+      <div class="q-progress">已回答 <span id="qCount">0</span> / 6 题</div>
+    </div>
+  </div><!-- #questionnaire -->
+</div><!-- #questionnaire-screen -->
+
+<script>
+// 随机化所有参数
+function randomize() {
+  function rnd(lo, hi) { return lo + Math.random() * (hi - lo); }
+  function rndInt(lo, hi) { return Math.round(rnd(lo, hi)); }
+
+  // 外形
+  window._setSlider(slEase,    'valEase',    rnd(eMin, eMax));
+  // 内型
+  window._setSlider(slSize,    'valSize',    rnd(0,   0.75));
+  window._setSlider(slAxis,    'valAxis',    rnd(0,   1));
+  window._setSlider(slCount,   'valCount',   rndInt(2, 40));
+  window._setSlider(slSpread,  'valSpread',  rnd(-1,  1));
+  window._setSlider(slLength,  'valLength',  rnd(0.2, 1));
+  window._setSlider(slThick,   'valThick',   rnd(0,   1));
+  window._setSlider(slTaper,   'valTaper',   rnd(-2,  2));
+  // 形状特性
+  window._setSlider(slRhythm,  'valRhythm',  rnd(0,   1));
+  window._setSlider(slPerturb, 'valPerturb', rnd(0,   1));
+  window._setSlider(slStructW, 'valStructW', rnd(0,   1));
+  window._setSlider(slBendW,   'valBendW',   rnd(0,   1));
+  window._setSlider(slBoundW,  'valBoundW',  rnd(0,   1));
+  window._setSlider(slSmoothW, 'valSmoothW', rnd(0,   1));
+
+  if (window._redraw) window._redraw();
+}
+
+// 导出 PNG
+function exportPNG() {
+  const canvas = document.querySelector('#sketch-host canvas');
+  const a = document.createElement('a');
+  a.download = 'meihua.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+  startPlayback();
+}
+
+// 动画控制
+let animPlaying = false;
+const mainScreen = document.getElementById('zoom-wrap');
+const questionnaireScreen = document.getElementById('questionnaire-screen');
+const bgm = document.getElementById('bgm');
+
+function syncAnimButton() {
+  document.getElementById('btnAnim').textContent = animPlaying ? '⏸ 暂停' : '▶ 播放';
+}
+
+function startPlayback() {
+  animPlaying = true;
+  syncAnimButton();
+  if (window._p5loop) window._p5loop(true);
+  bgm.play().then(() => { audioStarted = true; }).catch(() => {});
+}
+
+function stopPlayback() {
+  animPlaying = false;
+  syncAnimButton();
+  if (window._p5loop) window._p5loop(false);
+  bgm.pause();
+}
+
+function toggleAnim() {
+  if (animPlaying) stopPlayback();
+  else startPlayback();
+}
+
+// 尝试自动启动（页面加载后调用，音频可能被浏览器拦截）
+let audioStarted = false;
+function tryAutoStart() {
+  if (animPlaying) return;
+  animPlaying = true;
+  syncAnimButton();
+  if (window._p5loop) window._p5loop(true);
+  bgm.play().then(() => { audioStarted = true; }).catch(() => {
+    // 浏览器拦截了音频，动画照常跑，等用户首次交互再补播
+  });
+}
+
+// 用户手势后补播音频（专门处理 autoplay 被拦截的情况）
+function ensureAudio() {
+  if (audioStarted || !animPlaying) return;
+  bgm.play().then(() => { audioStarted = true; }).catch(() => {});
+}
+
+function openQuestionnaire() {
+  mainScreen.classList.add('panel-hidden');
+  questionnaireScreen.classList.remove('panel-hidden');
+}
+
+function closeQuestionnaire() {
+  questionnaireScreen.classList.add('panel-hidden');
+  mainScreen.classList.remove('panel-hidden');
+}
+
+// ── 人格生成模式 ───────────────────────────────────────────────
+
+// ── 三套题库 ──────────────────────────────────────────────────
+const QUESTION_SETS = [
+  // 题库 A：理性版
+  [
+    { label: 'Q1 · 稳定性',   text: '您在大多数时候的状态更接近？',  opts: ['平稳、持续', '偶尔波动', '起伏明显'] },
+    { label: 'Q2 · 表达方式', text: '您表达自己的方式更接近？',      opts: ['内敛、不外露', '适中', '外放、直接'] },
+    { label: 'Q3 · 节奏方式', text: '您做事情的节奏更接近？',        opts: ['集中完成', '均匀推进', '多阶段变化'] },
+    { label: 'Q4 · 性格气质', text: '您的整体气质更接近？',          opts: ['温和、圆润', '中性', '锐利、明确'] },
+    { label: 'Q5 · 发力方式', text: '您做事情的发力方式更接近？',    opts: ['前期用力，后面放松', '均匀发力', '后期逐渐增强'] },
+    { label: 'Q6 · 自我边界', text: '您更倾向于？',                  opts: ['内收', '平衡', '外扩'] },
+  ],
+  // 题库 B：隐喻版
+  [
+    { label: 'Q1 · 状态', text: '您更像哪种水？',   opts: ['湖水', '河流', '海浪'] },
+    { label: 'Q2 · 表达', text: '您更像哪种光？',   opts: ['微光', '柔光', '强光'] },
+    { label: 'Q3 · 节奏', text: '您更像哪种律动？', opts: ['心跳', '呼吸', '风'] },
+    { label: 'Q4 · 气质', text: '您更像哪种质感？', opts: ['雾', '空气', '刀锋'] },
+    { label: 'Q5 · 力量', text: '您的力量感更像？', opts: ['先燃后散', '稳定燃烧', '渐渐增强'] },
+    { label: 'Q6 · 边界', text: '您的方向感更像？', opts: ['向内', '平衡', '向外'] },
+  ],
+  // 题库 C：情绪版
+  [
+    { label: 'Q1 · 情绪状态', text: '您通常的情绪状态？',   opts: ['平静', '波动', '强烈'] },
+    { label: 'Q2 · 表达方式', text: '您表达情感的方式？',   opts: ['含蓄', '自然', '直接'] },
+    { label: 'Q3 · 行动节奏', text: '您行动的节奏更像？',   opts: ['爆发型', '持续型', '起伏型'] },
+    { label: 'Q4 · 性格',     text: '您的性格更接近？',     opts: ['温润', '清晰', '锐利'] },
+    { label: 'Q5 · 动力',     text: '您的动力分布更像？',   opts: ['先强后弱', '均衡', '后劲强'] },
+    { label: 'Q6 · 边界感',   text: '您的自我边界更倾向？', opts: ['收缩', '平衡', '扩散'] },
+  ],
+];
+
+// ── 三套映射模式 ───────────────────────────────────────────────
+const MAPPINGS = [
+  // 模式 0：标准人格映射
+  [
+    { A: { perturb:0.1,  structW:0.2, bendW:0.1, boundW:0.05 },
+      B: { perturb:0.4,  structW:0.5, bendW:0.4, boundW:0.3  },
+      C: { perturb:0.85, structW:0.8, bendW:0.7, boundW:0.6  } },
+    { A: { length:0.3, count:6,  thick:0.2 },
+      B: { length:0.6, count:10, thick:0.4 },
+      C: { length:0.9, count:18, thick:0.7 } },
+    { A: { rhythm:0.2,  spread:0.7  },
+      B: { rhythm:0.5,  spread:0    },
+      C: { rhythm:0.85, spread:-0.7 } },
+    { A: { axis:0.1, smoothW:0.8 },
+      B: { axis:0.5, smoothW:0.4 },
+      C: { axis:0.9, smoothW:0.1 } },
+    { A: { taper:1  }, B: { taper:0 }, C: { taper:-1 } },
+    { A: { size:0.65, easeRatio:0.8 },
+      B: { size:0.4,  easeRatio:0.5 },
+      C: { size:0.2,  easeRatio:0.2 } },
+  ],
+  // 模式 1：结构反转
+  [
+    { A: { perturb:0.2, structW:0.7 },
+      B: { perturb:0.5, structW:0.5 },
+      C: { perturb:0.8, structW:0.3 } },
+    { A: { count:16, thick:0.2, length:0.5 },
+      B: { count:10, thick:0.4, length:0.6 },
+      C: { count:6,  thick:0.8, length:0.9 } },
+    { A: { rhythm:0.3, spread:0.5  },
+      B: { rhythm:0.5, spread:0    },
+      C: { rhythm:0.9, spread:-0.8 } },
+    { A: { smoothW:0.9, axis:0.2 },
+      B: { smoothW:0.5, axis:0.5 },
+      C: { smoothW:0.1, axis:0.9 } },
+    { A: { taper:0.8 }, B: { taper:0 }, C: { taper:-0.8 } },
+    { A: { size:0.7,  easeRatio:0.85 },
+      B: { size:0.45, easeRatio:0.5  },
+      C: { size:0.25, easeRatio:0.2  } },
+  ],
+  // 模式 2：情绪驱动
+  [
+    { A: { perturb:0.05 }, B: { perturb:0.4 }, C: { perturb:0.95 } },
+    { A: { spread:0.6,  length:0.4 },
+      B: { spread:0,    length:0.6 },
+      C: { spread:-0.8, length:1   } },
+    { A: { rhythm:0.3 }, B: { rhythm:0.6 }, C: { rhythm:1 } },
+    { A: { smoothW:0.85, axis:0.2 },
+      B: { smoothW:0.5,  axis:0.5 },
+      C: { smoothW:0.05, axis:1   } },
+    { A: { taper:1 }, B: { taper:0 }, C: { taper:-1 } },
+    { A: { size:0.7, easeRatio:0.9 },
+      B: { size:0.5, easeRatio:0.5 },
+      C: { size:0.2, easeRatio:0.1 } },
+  ],
+];
+
+// 当前题库索引（每次重置时随机选）
+let currentSetIdx = Math.floor(Math.random() * 3);
+const qAnswers = {};
+
+function renderQuestions() {
+  const set = QUESTION_SETS[currentSetIdx];
+  const body = document.getElementById('q-body');
+  body.innerHTML = set.map((q, i) => `
+    <div class="q-item">
+      <div class="q-label">${q.label}</div>
+      <div class="q-text">${q.text}</div>
+      <div class="q-options">
+        ${['A','B','C'].map((v, j) => `
+          <div class="q-opt" data-q="${i+1}" data-v="${v}" onclick="selectOpt(this)">
+            <span class="q-opt-key">${v}</span>
+            <span class="q-opt-text">${q.opts[j]}</span>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+renderQuestions();
+
+function selectOpt(el) {
+  ensureAudio();
+  const q = el.dataset.q;
+  document.querySelectorAll(`.q-opt[data-q="${q}"]`).forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  qAnswers[q] = el.dataset.v;
+  const cnt = Object.keys(qAnswers).length;
+  document.getElementById('qCount').textContent = cnt;
+  document.getElementById('btnSubmit').disabled = cnt < 6;
+}
+
+function submitPersonality() {
+  // 随机选择映射模式
+  const mappingMode = Math.floor(Math.random() * 3);
+  const mapping = MAPPINGS[mappingMode];
+
+  // 从各题映射中合并参数
+  const params = {};
+  for (let i = 0; i < 6; i++) {
+    const v = qAnswers[String(i + 1)];
+    Object.assign(params, mapping[i][v]);
+  }
+
+  // easeRatio → 实际 ease 值
+  const easeVal = eMin + (eMax - eMin) * (params.easeRatio ?? 0.5);
+
+  // 随机扰动 ±8%
+  function jitter(v) { return v * (1 + (Math.random() - 0.5) * 0.16); }
+  function jitterClamped(v, lo, hi) { return Math.max(lo, Math.min(hi, jitter(v))); }
+
+  window._setSlider(slEase,    'valEase',    jitterClamped(easeVal,              eMin, eMax));
+  window._setSlider(slSize,    'valSize',    jitterClamped(params.size    ?? 0.4, 0,   1   ));
+  window._setSlider(slAxis,    'valAxis',    jitterClamped(params.axis    ?? 0.5, 0,   1   ));
+  window._setSlider(slCount,   'valCount',   Math.round(jitterClamped(params.count  ?? 10,  0,  40  )));
+  window._setSlider(slSpread,  'valSpread',  jitterClamped(params.spread  ?? 0,  -1,   1   ));
+  window._setSlider(slLength,  'valLength',  jitterClamped(params.length  ?? 0.6, 0,   1   ));
+  window._setSlider(slThick,   'valThick',   jitterClamped(params.thick   ?? 0.4, 0,   1   ));
+  window._setSlider(slTaper,   'valTaper',   jitterClamped(params.taper   ?? 0,  -2,   2   ));
+  window._setSlider(slRhythm,  'valRhythm',  jitterClamped(params.rhythm  ?? 0.5, 0,   1   ));
+  window._setSlider(slPerturb, 'valPerturb', jitterClamped(params.perturb ?? 0.4, 0,   1   ));
+  window._setSlider(slStructW, 'valStructW', jitterClamped(params.structW ?? 0.5, 0,   1   ));
+  window._setSlider(slBendW,   'valBendW',   jitterClamped(params.bendW   ?? 0.3, 0,   1   ));
+  window._setSlider(slBoundW,  'valBoundW',  jitterClamped(params.boundW  ?? 0.2, 0,   1   ));
+  window._setSlider(slSmoothW, 'valSmoothW', jitterClamped(params.smoothW ?? 0.3, 0,   1   ));
+
+  // 停止动画，定格形态
+  stopPlayback();
+  if (window._redraw) window._redraw();
+
+  // 重置问卷，随机切换下一套题库
+  document.querySelectorAll('.q-opt.selected').forEach(o => o.classList.remove('selected'));
+  Object.keys(qAnswers).forEach(k => delete qAnswers[k]);
+  document.getElementById('qCount').textContent = '0';
+  document.getElementById('btnSubmit').disabled = true;
+  currentSetIdx = Math.floor(Math.random() * 3);
+  renderQuestions();
+  closeQuestionnaire();
+}
+// ── 花瓣参数 ──────────────────────────────────────────────────
+const N = 5, orbit = 120, r0 = 40, R = 150;
+const sinPN = Math.sin(Math.PI / N);
+const eCrit = (orbit * sinPN - r0) / (orbit * sinPN + R - r0);
+const eMin  = eCrit + 0.01;
+const eMax  = 0.999;
+
+// ── 三套独立谐波集（频率/相位各异，避免视觉重复）────────────────
+// structure: 低频 (freq 2–7)，驱动中心形状轮廓大弯曲
+const HARM_STRUCT = Array.from({ length: 6 }, (_, k) => ({
+  freq: k + 2,
+  phA:  (k * 2.399) % (2 * Math.PI),
+  phB:  (k * 1.618) % (2 * Math.PI)
+}));
+// bend: 中频 (freq 4–10)，驱动花蕊路径侧向弯曲
+const HARM_BEND = Array.from({ length: 7 }, (_, k) => ({
+  freq: k + 4,
+  phA:  (k * 1.732 + 0.9) % (2 * Math.PI),
+  phB:  (k * 2.618 + 1.4) % (2 * Math.PI)
+}));
+// boundary: 高频 (freq 8–19)，驱动中心轮廓细节纹理
+const HARM_BOUND = Array.from({ length: 12 }, (_, k) => ({
+  freq: k + 8,
+  phA:  (k * 3.236 + 0.5) % (2 * Math.PI),
+  phB:  (k * 1.414 + 2.1) % (2 * Math.PI)
+}));
+
+// 通用谐波噪声求值，自动归一化到 [-1, 1]
+function evalNoise(harmonics, θ) {
+  let noise = 0, norm = 0;
+  for (const h of harmonics) {
+    const amp = 1 / (h.freq * 0.7);
+    noise += amp * (Math.sin(h.freq * θ + h.phA) + 0.5 * Math.cos((h.freq + 1) * θ + h.phB));
+    norm  += amp * 1.5;
+  }
+  return norm > 0 ? noise / norm : 0;
+}
+
+// ── 滑块绑定 ──────────────────────────────────────────────────
+function bindSlider(id, displayId, initMin, initMax, initVal) {
+  const sl  = document.getElementById(id);
+  const dsp = document.getElementById(displayId);
+  if (initMin !== undefined) { sl.min = initMin; sl.max = initMax; sl.value = initVal; }
+  function update() {
+    const pct = ((sl.value - sl.min) / (sl.max - sl.min) * 100).toFixed(1);
+    sl.style.setProperty('--pct', pct + '%');
+    dsp.textContent = parseFloat(sl.value).toFixed(2);
+  }
+  update();
+  sl.addEventListener('input', () => { update(); if (window._redraw) window._redraw(); });
+  return sl;
+}
+
+const slEase    = bindSlider('slEase',    'valEase',    eMin.toFixed(4), eMax.toFixed(4), (eCrit+0.02).toFixed(4));
+const slSize    = bindSlider('slSize',    'valSize');
+const slAxis    = bindSlider('slAxis',    'valAxis');
+const slCount   = bindSlider('slCount',   'valCount');
+const slSpread  = bindSlider('slSpread',  'valSpread');
+const slLength  = bindSlider('slLength',  'valLength');
+const slThick   = bindSlider('slThick',   'valThick');
+const slTaper   = bindSlider('slTaper',   'valTaper');
+const slRhythm  = bindSlider('slRhythm',  'valRhythm');
+const slPerturb = bindSlider('slPerturb', 'valPerturb');
+const slStructW = bindSlider('slStructW', 'valStructW', 0, 1, 0.6);
+const slBendW   = bindSlider('slBendW',   'valBendW',   0, 1, 0.2);
+const slBoundW  = bindSlider('slBoundW',  'valBoundW',  0, 1, 0.2);
+const slSmoothW = bindSlider('slSmoothW', 'valSmoothW', 0, 1, 0.0);
+
+// Chaikin 角点平滑算法
+// closed=true: 最后一点与第一点相连（中心形状闭合曲线）
+// closed=false: 开放路径（保留端点，不平滑头尾各一个控制点）
+function chaikin(pts, iters, closed) {
+  if (iters <= 0 || pts.length < 3) return pts;
+  let cur = pts;
+  for (let it = 0; it < iters; it++) {
+    const next = [];
+    const n = cur.length;
+    if (closed) {
+      for (let i = 0; i < n; i++) {
+        const a = cur[i], b = cur[(i + 1) % n];
+        next.push([a[0]*0.75 + b[0]*0.25, a[1]*0.75 + b[1]*0.25]);
+        next.push([a[0]*0.25 + b[0]*0.75, a[1]*0.25 + b[1]*0.75]);
+      }
+    } else {
+      // 开放路径：保留首尾端点不变
+      next.push(cur[0]);
+      for (let i = 0; i < n - 1; i++) {
+        const a = cur[i], b = cur[i + 1];
+        next.push([a[0]*0.75 + b[0]*0.25, a[1]*0.75 + b[1]*0.25]);
+        next.push([a[0]*0.25 + b[0]*0.75, a[1]*0.25 + b[1]*0.75]);
+      }
+      next.push(cur[n - 1]);
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+// 路径细分：每条边插入一个中点，让 Chaikin 有更多控制点
+function subdivide(pts, closed) {
+  if (pts.length < 2) return pts;
+  const out = [];
+  const n = pts.length;
+  const limit = closed ? n : n - 1;
+  for (let i = 0; i < limit; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    out.push(a);
+    out.push([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5]);
+  }
+  if (!closed) out.push(pts[n - 1]);
+  return out;
+}
+
+// 花蕊离屏缓冲（融合用）
+let stamenBuf = null;
+
+// ── p5 ───────────────────────────────────────────────────────
+// 计算三层实际强度（归一化权重 × perturb）
+function getPerturbAmounts() {
+  const perturb = parseFloat(slPerturb.value);
+  const sW  = parseFloat(slStructW.value);
+  const beW = parseFloat(slBendW.value);
+  const boW = parseFloat(slBoundW.value);
+  const smW = parseFloat(slSmoothW.value);
+  const total = sW + beW + boW;
+  const smoothAmt = smW;   // 圆润独立于扰动，直接使用滑块值
+  if (total < 0.001) return { structAmt: 0, bendAmt: 0, boundAmt: 0, smoothAmt };
+  return {
+    structAmt: perturb * sW  / total,
+    bendAmt:   perturb * beW / total,
+    boundAmt:  perturb * boW / total,
+    smoothAmt,
+  };
+}
+
+new p5(function(p) {
+  p.setup = function() {
+    p.createCanvas(520, 520).parent('sketch-host');
+    stamenBuf = p.createGraphics(520, 520);
+    p.noLoop();
+    window._redraw  = () => p.redraw();
+    window._p5loop  = (on) => { on ? p.loop() : p.noLoop(); };
+    p.frameRate(24);
+    randomize();
+    tryAutoStart();
+  };
+
+  // 工具：把值写入滑块并触发更新显示
+  function setSlider(sl, valId, v) {
+    const clamped = Math.max(parseFloat(sl.min), Math.min(parseFloat(sl.max), v));
+    sl.value = clamped;
+    const pct = ((clamped - parseFloat(sl.min)) / (parseFloat(sl.max) - parseFloat(sl.min)) * 100).toFixed(1);
+    sl.style.setProperty('--pct', pct + '%');
+    document.getElementById(valId).textContent = parseFloat(clamped).toFixed(2);
+  }
+  window._setSlider = setSlider;
+
+  // ── 花瓣外轮廓 ────────────────────────────────────────────
+  function drawPetals(ease) {
+    const r   = p.lerp(r0, R, ease);
+    const pos = Array.from({ length: N }, (_, i) => {
+      const a = p.TWO_PI / N * i - p.HALF_PI;
+      const d = orbit * (1 - ease);
+      return p.createVector(p.width/2 + Math.cos(a)*d, p.height/2 + Math.sin(a)*d);
+    });
+
+    p.noStroke(); p.fill(20);
+    for (let i = 0; i < N; i++) p.ellipse(pos[i].x, pos[i].y, r*2, r*2);
+
+    // 填充花瓣之间的中心空洞：以圆心为中心画一个内切多边形覆盖空隙
+    p.beginShape();
+    for (let i = 0; i < N; i++) {
+      const a = p.TWO_PI / N * i - p.HALF_PI;
+      const d = orbit * (1 - ease);
+      p.vertex(p.width/2 + Math.cos(a)*d, p.height/2 + Math.sin(a)*d);
+    }
+    p.endShape(p.CLOSE);
+
+    p.noFill(); p.stroke(20); p.strokeWeight(1.8);
+    if (orbit*(1-ease) < 1) { p.ellipse(p.width/2, p.height/2, r*2, r*2); return; }
+
+    for (let i = 0; i < N; i++) {
+      const cx = pos[i].x, cy = pos[i].y;
+      const iCW = (i+1)%N, iCCW = (i-1+N)%N;
+      const dxCW  = pos[iCW].x-cx,  dyCW  = pos[iCW].y-cy;
+      const dxCCW = pos[iCCW].x-cx, dyCCW = pos[iCCW].y-cy;
+      const d = Math.hypot(dxCW, dyCW);
+      const alpha = Math.acos(Math.min(1, d/(2*r)));
+      let s = Math.atan2(dyCCW, dxCCW) + alpha;
+      let e = Math.atan2(dyCW,  dxCW ) - alpha;
+      while (e <= s) e += p.TWO_PI;
+      p.arc(cx, cy, r*2, r*2, s, e, p.OPEN);
+    }
+  }
+
+  // ── 中心核半径函数 ────────────────────────────────────────
+  // structAmt: 低频扰动强度（大形变）
+  // boundAmt:  高频扰动强度（细节纹理）
+  function coreR(θ, base, axis, structAmt, boundAmt) {
+    // axis 0 → 圆形，axis 1 → 尖刺形（跳过方形）
+    let r = base;
+
+    if (axis > 0) {
+      // 三组不同频率的尖刺叠加，产生有机不规则感
+      const spike =
+          0.35 * Math.pow(Math.max(0, Math.cos(3 * θ + 0.7)), 3)
+        + 0.20 * Math.pow(Math.max(0, Math.cos(7 * θ + 2.1)), 4)
+        + 0.14 * Math.pow(Math.max(0, Math.cos(5 * θ - 0.9)), 4);
+      r *= (1 + axis * spike);
+    }
+
+    // ② structure 扰动（低频，大块起伏）
+    if (structAmt > 0) {
+      r *= (1 + structAmt * 0.22 * evalNoise(HARM_STRUCT, θ));
+    }
+
+    // ③ boundary 扰动：细小起伏，数量随 boundAmt 从 0→1 递增
+    // boundAmt=0 → 无起伏；boundAmt=1 → 最多细小起伏（高频纯净）
+    if (boundAmt > 0) {
+      // 起伏频率从低到高随 boundAmt 增大：约 6→28 个周期
+      const fq = 6 + boundAmt * 22;
+      // 三层细高频叠加，制造有机感（避免单一正弦的"塑料感"）
+      const micro =
+          0.55 * Math.sin(fq        * θ + 1.3)
+        + 0.30 * Math.sin(fq * 1.6  * θ + 2.7)
+        + 0.15 * Math.sin(fq * 2.5  * θ + 0.5);
+      // 振幅平方根映射：低值时已可见，高值时更强但不过分
+      r *= (1 + Math.sqrt(boundAmt) * 0.08 * micro);
+    }
+
+    return Math.max(r, 1);
+  }
+
+  function drawCore() {
+    const cx      = p.width  / 2;
+    const cy      = p.height / 2;
+    const ease    = parseFloat(slEase.value);
+    const sizeFac = parseFloat(slSize.value);
+    const axis    = parseFloat(slAxis.value);
+    const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
+
+    const { base, rPetal, dOrbit } = computeCoreGeom(ease, sizeFac);
+    const sample = makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit);
+
+    const STEPS = 300;
+    let pts = Array.from({ length: STEPS }, (_, i) => {
+      const θ = p.TWO_PI * i / STEPS;
+      const r = sample(θ);
+      return [cx + Math.cos(θ) * r, cy + Math.sin(θ) * r];
+    });
+
+    // 圆润混入：把每个点的半径向 base 纯圆插值
+    // smoothAmt=0 → 原始扰动形状；smoothAmt=1 → 接近完美圆形
+    if (smoothAmt > 0) {
+      const blend = smoothAmt * smoothAmt;   // easeIn：低值时效果轻柔
+      pts = pts.map(([x, y]) => {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 0.001) return [x, y];
+        const angle = Math.atan2(dy, dx);
+        const newR  = dist + (base - dist) * blend;
+        return [cx + Math.cos(angle) * newR, cy + Math.sin(angle) * newR];
+      });
+    }
+
+    // Chaikin 圆滑：iter = floor(smoothAmt × 5)，低值(<0.2)无变化
+    const iters = Math.min(5, Math.floor(smoothAmt * 6));
+    if (iters > 0) {
+      pts = subdivide(pts, true);
+      if (smoothAmt > 0.4) pts = subdivide(pts, true);
+      pts = chaikin(pts, iters, true);
+    }
+
+    p.fill(255); p.noStroke();
+    p.beginShape();
+    p.curveVertex(pts[pts.length-1][0], pts[pts.length-1][1]);
+    for (const [x, y] of pts) p.curveVertex(x, y);
+    p.curveVertex(pts[0][0], pts[0][1]);
+    p.curveVertex(pts[1][0], pts[1][1]);
+    p.endShape();
+  }
+
+  // ── 共享几何：中心质量参数 ────────────────────────────────────
+  function computeCoreGeom(ease, sizeFac) {
+    const rPetal  = p.lerp(r0, R, ease);
+    const dOrbit  = orbit * (1 - ease);
+    const sinPN   = Math.sin(Math.PI / N);
+    const cosPN   = Math.cos(Math.PI / N);
+    const disc0   = rPetal*rPetal - dOrbit*dOrbit*sinPN*sinPN;
+    const minBound= disc0 > 0 ? dOrbit*cosPN + Math.sqrt(disc0) : rPetal;
+    const base    = p.lerp(6, minBound * 0.86, sizeFac);
+    return { base, rPetal, dOrbit, minBound };
+  }
+
+  // ── 共享采样器：返回中心形状在角度 θ 的真实绘制半径 ─────────
+  function makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit) {
+    function petalBound(θ) {
+      let maxRho = 0;
+      for (let i = 0; i < N; i++) {
+        const a   = p.TWO_PI / N * i - p.HALF_PI;
+        const px  = Math.cos(a) * dOrbit;
+        const py  = Math.sin(a) * dOrbit;
+        const proj= px * Math.cos(θ) + py * Math.sin(θ);
+        const perp= px * Math.sin(θ) - py * Math.cos(θ);
+        const disc= rPetal * rPetal - perp * perp;
+        if (disc >= 0) maxRho = Math.max(maxRho, proj + Math.sqrt(disc));
+      }
+      return maxRho;
+    }
+    return function(θ) {
+      let r = coreR(θ, base, axis, structAmt, boundAmt);
+      const bound = petalBound(θ);
+      if (bound > 0) {
+        const limit = bound * 0.97;
+        const softStart = limit * 0.68;
+        if (r > softStart) {
+          const room = limit - softStart;
+          r = softStart + room * Math.tanh((r - softStart) / room);
+        }
+      }
+      return r;
+    };
+  }
+
+  // ── 放射结构：路径 + 宽度函数 ──────────────────────────────────
+  function drawStamens() {
+    const cx       = p.width  / 2;
+    const cy       = p.height / 2;
+    const count    = parseInt(slCount.value);
+    const lenFac   = parseFloat(slLength.value);
+    const thickFac = parseFloat(slThick.value);
+    const taper    = parseFloat(slTaper.value);
+    const rhythm   = parseFloat(slRhythm.value);
+    const spread   = parseFloat(slSpread.value);
+
+    if (count === 0) return;
+
+    const ease    = parseFloat(slEase.value);
+    const sizeFac = parseFloat(slSize.value);
+    const axis    = parseFloat(slAxis.value);
+    const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
+
+    const { base, rPetal, dOrbit, minBound } = computeCoreGeom(ease, sizeFac);
+    const sample = makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit);
+
+    // ── 长度调制：两层叠加 ────────────────────────────────────
+    // 层1：规则波动（低频谐波，产生有节奏的长短起伏）
+    // 用 3 个固定低频分量，相位错开，形成自然的波形节奏
+    function rhythmMod(θ) {
+      const wave =
+          0.50 * Math.cos(2 * θ + 0.3)       // 2周期：两组长短
+        + 0.30 * Math.cos(3 * θ - 0.8)       // 3周期：三组
+        + 0.20 * Math.cos(5 * θ + 1.1);      // 5周期：细节起伏
+      return wave;   // 范围约 [-1, 1]
+    }
+
+    // 每根花蕊的长度系数：rhythm 规则波动 + boundAmt 高频有机扰动
+    function lengthScale(θ) {
+      const s = 1 + rhythm * 0.65 * rhythmMod(θ)
+                  + boundAmt * 0.35 * evalNoise(HARM_BOUND, θ);
+      return Math.max(0.15, s);
+    }
+
+    const lenMax  = minBound * 0.92;
+    const extraLen = (lenMax - base) * lenFac;
+    // SIZE 越大，花蕊根部越粗（easeOut 使小值时影响柔和）
+    const sizeEase = 1 - Math.pow(1 - sizeFac, 2);   // easeOut
+    const maxW    = p.lerp(1, 12, thickFac) * (1 + sizeEase * 1.5);
+
+    // ── 宽度函数 f(t)，t∈[0,1]，返回 [0..1] ──────────────────
+    // taper -2→+2 连续混合五种基础函数：
+    //  -2: 中间最细  f=1-sin(πt)
+    //  -1: 头粗根细  f=t
+    //   0: 等粗      f=1
+    //  +1: 根粗头细  f=1-t
+    //  +2: 中间最粗  f=sin(πt)
+    function widthProfile(t) {
+      const fMidThin  = 1 - Math.sin(Math.PI * t);
+      const fTipThick = t;
+      const fFlat     = 1;
+      const fTipThin  = 1 - t;
+      const fMidThick = Math.sin(Math.PI * t);
+
+      let v;
+      if (taper <= -1) {
+        v = p.lerp(fMidThin,  fTipThick, taper + 2);
+      } else if (taper <= 0) {
+        v = p.lerp(fTipThick, fFlat,     taper + 1);
+      } else if (taper <= 1) {
+        v = p.lerp(fFlat,     fTipThin,  taper);
+      } else {
+        v = p.lerp(fTipThin,  fMidThick, taper - 1);
+      }
+      // 最细处不低于 maxW 的 18%，保证可见
+      return Math.max(v, 0.18);
+    }
+
+    // SIZE 驱动的根部加宽，基于视觉根部（遮挡边界）重映射 t
+    // cutRatio = 遮挡段占总路径的比例，tVisible 从遮挡边界重新计为 0
+    // thickness = baseThickness × (1 + sizeFac × k × (1 - tVisible))
+    const K_ROOT = 3.0;   // 根部加粗系数
+
+    function effectiveWidth(t, cutRatio) {
+      const tVisible = Math.max(0, Math.min(1, (t - cutRatio) / Math.max(0.001, 1 - cutRatio)));
+      const base = widthProfile(tVisible);
+      const rootBoost = 1 + sizeFac * K_ROOT * Math.pow(1 - tVisible, 1.5);
+      return base * rootBoost;
+    }
+
+    // 花瓣边界函数（与 makeCoreSampler 内部一致）
+    function petalBoundAt(θ) {
+      let maxRho = 0;
+      for (let k = 0; k < N; k++) {
+        const a    = p.TWO_PI / N * k - p.HALF_PI;
+        const px2  = Math.cos(a) * dOrbit;
+        const py2  = Math.sin(a) * dOrbit;
+        const proj = px2 * Math.cos(θ) + py2 * Math.sin(θ);
+        const perp = px2 * Math.sin(θ) - py2 * Math.cos(θ);
+        const disc = rPetal * rPetal - perp * perp;
+        if (disc >= 0) maxRho = Math.max(maxRho, proj + Math.sqrt(disc));
+      }
+      return maxRho;
+    }
+
+    p.fill(255); p.noStroke();
+
+    // ── 角度分布：多峰聚集分布（增强版）────────────────────────────
+    // spread > 0 → 花蕊聚向 cluster 中心（密集感）
+    // spread < 0 → 花蕊逃离 cluster 中心（反聚集，更均匀）
+    // 指数映射让效果更加非线性、有冲击感
+    const spreadAbs   = Math.abs(spread);
+    const spreadSign  = spread >= 0 ? 1 : -1;
+    const spreadPower = Math.pow(spreadAbs, 1.8) * spreadSign;
+
+    // 4 个 cluster，位置随 count 整体旋转，避免与花瓣固定对称
+    const CLUSTER_COUNT = 4;
+    const σ = 0.28;   // 较窄 Gaussian，cluster 更集中清晰
+    const clusterCenters = Array.from({ length: CLUSTER_COUNT }, (_, k) =>
+      p.TWO_PI / CLUSTER_COUNT * k + count * 0.21
+    );
+
+    function density(θ) {
+      let d = 0;
+      for (const c of clusterCenters) {
+        let dθ = θ - c;
+        while (dθ >  Math.PI) dθ -= p.TWO_PI;
+        while (dθ < -Math.PI) dθ += p.TWO_PI;
+        d += Math.exp(-(dθ * dθ) / (σ * σ));
+      }
+      return d;
+    }
+
+    // 权重正确方向：spread > 0 → cluster 附近权重高 → CDF 这段更多样本 → 更多花蕊
+    // spread < 0 → cluster 附近权重低 → 该区域稀疏
+    function intervalWeight(θ) {
+      const d = density(θ);
+      if (spreadPower >= 0) {
+        return 1 + spreadPower * d * 3.5;
+      } else {
+        return Math.max(0.02, 1 + spreadPower * d * 3.5);
+      }
+    }
+
+    const rawAngles = [];
+    {
+      const SAMPLE = 360;
+      const sampleWeights = Array.from({ length: SAMPLE }, (_, k) =>
+        intervalWeight(p.TWO_PI / SAMPLE * k)
+      );
+      const totalW = sampleWeights.reduce((a, b) => a + b, 0);
+      const cdf = [];
+      let acc = 0;
+      for (let k = 0; k < SAMPLE; k++) {
+        acc += sampleWeights[k] / totalW;
+        cdf.push(acc);
+      }
+      for (let i = 0; i < count; i++) {
+        const target = (i + 0.5) / count;
+        let idx = cdf.findIndex(v => v >= target);
+        if (idx < 0) idx = SAMPLE - 1;
+        rawAngles.push(p.TWO_PI / SAMPLE * idx - p.HALF_PI);
+      }
+    }
+
+    // ── 花蕊体 ────────────────────────────────────────────────────
+    p.fill(255); p.noStroke();
+
+    const STEPS = 20;
+    for (let i = 0; i < count; i++) {
+      const θ      = rawAngles[i];
+      const boundR = sample(θ);
+      const rootProfile = widthProfile(0);
+      const rootBoost = 1 + sizeFac * K_ROOT;
+      const rootW = Math.max(1, rootProfile * rootBoost * maxW);
+      const retreat = Math.max(4, rootW * 0.9 + 2);
+      // 主动把根部更深地插进中心形状内部，优先消除接缝。
+      const insertDepth = Math.max(8, rootW * 1.15 + 6 + sizeFac * 10);
+      const startR = Math.max(base * 0.52, boundR - retreat - insertDepth);
+      const scaledExtra = extraLen * lengthScale(θ);
+      const maxEnd = petalBoundAt(θ) - maxW - 2;
+      const endR   = Math.min(boundR + scaledExtra, Math.max(maxEnd, boundR + 1));
+      const pathLen = endR - startR;
+      const stepLen = pathLen / STEPS;
+      const cutRatio = Math.max(0, Math.min(0.95, (boundR - startR) / Math.max(0.001, pathLen)));
+
+      const seed = θ * 1.7 + 0.9;
+      const freq = 3.0;
+      const bendScale = bendAmt * 2.0;
+
+      const pxArr = [cx + Math.cos(θ) * startR];
+      const pyArr = [cy + Math.sin(θ) * startR];
+      const dirArr = [θ];
+
+      for (let s = 1; s <= STEPS; s++) {
+        const t   = s / STEPS;
+        const dir = θ + bendScale * evalNoise(HARM_BEND, t * freq + seed);
+        pxArr.push(pxArr[s-1] + Math.cos(dir) * stepLen);
+        pyArr.push(pyArr[s-1] + Math.sin(dir) * stepLen);
+        dirArr.push(dir);
+      }
+
+      const left = [], right = [];
+      for (let s = 0; s <= STEPS; s++) {
+        const t   = s / STEPS;
+        const w   = effectiveWidth(t, cutRatio) * maxW;
+        const dir = dirArr[s];
+        const nx  = -Math.sin(dir), ny = Math.cos(dir);
+        left.push( [pxArr[s] + nx * w, pyArr[s] + ny * w]);
+        right.push([pxArr[s] - nx * w, pyArr[s] - ny * w]);
+      }
+
+      // 在花蕊根部补一块桥接面，让根部与多变的中心边界稳定重叠，
+      // 避免粗细/尖角变化时出现黑色三角缝。
+      const bridgeHalfAngle = Math.min(0.42, Math.max(0.08, rootW / Math.max(boundR, 1) * 1.35));
+      const bridgeInset = Math.max(2, rootW * 0.28);
+      const bridgeInnerR = Math.max(base * 0.4, startR - Math.max(10, rootW * 0.9));
+      const bridgeArc = [];
+      const BRIDGE_STEPS = 6;
+      for (let j = 0; j <= BRIDGE_STEPS; j++) {
+        const ang = θ - bridgeHalfAngle + (2 * bridgeHalfAngle * j / BRIDGE_STEPS);
+        const r = Math.max(base * 0.78, sample(ang) - bridgeInset);
+        bridgeArc.push([cx + Math.cos(ang) * r, cy + Math.sin(ang) * r]);
+      }
+      p.beginShape();
+      p.vertex(cx + Math.cos(θ) * bridgeInnerR, cy + Math.sin(θ) * bridgeInnerR);
+      for (const [x, y] of bridgeArc) p.vertex(x, y);
+      p.vertex(right[0][0], right[0][1]);
+      p.vertex(right[Math.min(2, STEPS)][0], right[Math.min(2, STEPS)][1]);
+      p.vertex(left[Math.min(2, STEPS)][0], left[Math.min(2, STEPS)][1]);
+      p.vertex(left[0][0], left[0][1]);
+      p.endShape(p.CLOSE);
+
+      const rightRev = right.slice().reverse();
+      let poly = [...left, ...rightRev];
+
+      const stamIters = Math.min(5, Math.floor(smoothAmt * 6));
+      if (stamIters > 0) {
+        poly = subdivide(poly, true);
+        if (smoothAmt > 0.4) poly = subdivide(poly, true);
+        poly = chaikin(poly, stamIters, true);
+      }
+
+      p.beginShape();
+      for (const [x, y] of poly) p.vertex(x, y);
+      p.endShape(p.CLOSE);
+    }
+  }
+
+  p.draw = function() {
+    // ── 动画：按指定范围各自独立缓慢循环 ─────────────────────────
+    if (animPlaying) {
+      const t = p.frameCount / 24;
+
+      function osc(lo, hi, speed, phase) {
+        return lo + (hi - lo) * (0.5 + 0.5 * Math.sin(t * speed + (phase || 0)));
+      }
+
+      setSlider(slSize,    'valSize',    osc(0,   0.5, 0.19, 0.0));
+      setSlider(slAxis,    'valAxis',    osc(0,   1.0, 0.17, 2.7));
+      setSlider(slEase,    'valEase',    eMin + (eMax - eMin) * (0.5 + 0.5 * Math.sin(t * 0.22)));
+      setSlider(slCount,   'valCount',   Math.round(osc(0, 40, 0.22, 0.5)));
+      setSlider(slSpread,  'valSpread',  osc(0,   1.0, 0.28, 1.2));
+      setSlider(slLength,  'valLength',  osc(0.6, 1.0, 0.31, 0.3));
+      setSlider(slThick,   'valThick',   osc(0,   1.0, 0.24, 2.1));
+      setSlider(slTaper,   'valTaper',   osc(0.2, 0.7, 0.36, 1.7));
+      setSlider(slRhythm,  'valRhythm',  osc(0,   1.0, 0.41, 0.8));
+      setSlider(slPerturb, 'valPerturb', osc(0,   1.0, 0.47, 0.4));
+      setSlider(slStructW, 'valStructW', osc(0.1, 1.0, 0.59, 1.0));
+      setSlider(slBendW,   'valBendW',   osc(0.0, 1.0, 0.73, 2.3));
+      setSlider(slBoundW,  'valBoundW',  osc(0.0, 1.0, 0.53, 3.1));
+      setSlider(slSmoothW, 'valSmoothW', osc(0.0, 1.0, 0.67, 1.8));
+    }
+
+    p.background(255);
+    const ease = parseFloat(slEase.value);
+    drawPetals(ease);
+    drawCore();
+    drawStamens();
+  };
+});
+
+// ── 缩放控制 ──────────────────────────────────────────────────
+let zoomLevel = 0.75;
+const zoomWrap = document.getElementById('zoom-wrap');
+function applyZoom() {
+  zoomWrap.style.transform = `scale(${zoomLevel})`;
+  document.getElementById('zoomLabel').textContent = Math.round(zoomLevel * 100) + '%';
+}
+function changeZoom(delta) {
+  zoomLevel = Math.min(1.2, Math.max(0.3, zoomLevel + delta));
+  applyZoom();
+}
+applyZoom();
+</script>
+</body>
+</html>
