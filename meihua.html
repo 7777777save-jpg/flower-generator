@@ -910,7 +910,7 @@ new p5(function(p) {
     // 圆润混入：把每个点的半径向 base 纯圆插值
     // smoothAmt=0 → 原始扰动形状；smoothAmt=1 → 接近完美圆形
     if (smoothAmt > 0) {
-      const blend = smoothAmt * smoothAmt;   // easeIn：低值时效果轻柔
+      const blend = Math.pow(smoothAmt, 0.9);
       pts = pts.map(([x, y]) => {
         const dx = x - cx, dy = y - cy;
         const dist = Math.hypot(dx, dy);
@@ -921,11 +921,12 @@ new p5(function(p) {
       });
     }
 
-    // Chaikin 圆滑：iter = floor(smoothAmt × 5)，低值(<0.2)无变化
-    const iters = Math.min(5, Math.floor(smoothAmt * 6));
+    // ROUND 提高时，中心形状更强地收圆，不只是轻微磨边。
+    const iters = Math.min(8, Math.floor(1 + smoothAmt * 8));
     if (iters > 0) {
       pts = subdivide(pts, true);
-      if (smoothAmt > 0.4) pts = subdivide(pts, true);
+      if (smoothAmt > 0.2) pts = subdivide(pts, true);
+      if (smoothAmt > 0.55) pts = subdivide(pts, true);
       pts = chaikin(pts, iters, true);
     }
 
@@ -997,6 +998,7 @@ new p5(function(p) {
     const sizeFac = parseFloat(slSize.value);
     const axis    = parseFloat(slAxis.value);
     const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
+    const roundForce = Math.pow(smoothAmt, 0.9);
 
     const { base, rPetal, dOrbit, minBound } = computeCoreGeom(ease, sizeFac);
     const sample = makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit);
@@ -1143,7 +1145,8 @@ new p5(function(p) {
     // ── 花蕊体 ────────────────────────────────────────────────────
     p.fill(255); p.noStroke();
 
-    const STEPS = 20;
+    const perfLoad = (animPlaying ? 0.45 : 0) + (count / 40) * 0.35 + smoothAmt * 0.25;
+    const STEPS = Math.max(14, Math.round(20 - perfLoad * 8));
     for (let i = 0; i < count; i++) {
       const θ      = rawAngles[i];
       const boundR = sample(θ);
@@ -1193,7 +1196,7 @@ new p5(function(p) {
       const bridgeInset = Math.max(2, rootW * 0.28);
       const bridgeInnerR = Math.max(base * 0.4, startR - Math.max(10, rootW * 0.9));
       const bridgeArc = [];
-      const BRIDGE_STEPS = 6;
+      const BRIDGE_STEPS = Math.max(4, Math.round(6 - perfLoad * 2));
       for (let j = 0; j <= BRIDGE_STEPS; j++) {
         const ang = θ - bridgeHalfAngle + (2 * bridgeHalfAngle * j / BRIDGE_STEPS);
         const r = Math.max(base * 0.78, sample(ang) - bridgeInset);
@@ -1208,14 +1211,64 @@ new p5(function(p) {
       p.vertex(left[0][0], left[0][1]);
       p.endShape(p.CLOSE);
 
-      const rightRev = right.slice().reverse();
-      let poly = [...left, ...rightRev];
-
-      const stamIters = Math.min(5, Math.floor(smoothAmt * 6));
+      let leftEdge = left;
+      let rightEdge = right;
+      const stamIters = Math.min(animPlaying ? 3 : 4, Math.floor(1 + smoothAmt * (animPlaying ? 2.4 : 3.2)));
       if (stamIters > 0) {
+        leftEdge = subdivide(leftEdge, false);
+        rightEdge = subdivide(rightEdge, false);
+        if (!animPlaying && count <= 18 && smoothAmt > 0.6) {
+          leftEdge = subdivide(leftEdge, false);
+          rightEdge = subdivide(rightEdge, false);
+        }
+        leftEdge = chaikin(leftEdge, stamIters, false);
+        rightEdge = chaikin(rightEdge, stamIters, false);
+      }
+
+      const rightRev = rightEdge.slice().reverse();
+
+      // ── 顶端半圆弧：smoothAmt=0 平头，smoothAmt=1 完整半圆 ──────
+      let poly;
+      if (smoothAmt > 0.01 && leftEdge.length >= 1 && rightRev.length >= 1) {
+        const tipLeft  = leftEdge[leftEdge.length - 1];
+        const tipRight = rightRev[0];
+        const tipMidX  = (tipLeft[0] + tipRight[0]) * 0.5;
+        const tipMidY  = (tipLeft[1] + tipRight[1]) * 0.5;
+        const halfGap  = Math.hypot(tipLeft[0] - tipRight[0], tipLeft[1] - tipRight[1]) * 0.5;
+
+        // 最终轴向（花蕊末端实际走向）
+        const finalDir = dirArr[STEPS];
+        const arcR = halfGap;
+        // 弧线步数：smoothAmt=0.5 时 6 步，=1 时 12 步
+        const arcSteps = Math.max(4, Math.round(4 + smoothAmt * (animPlaying ? 6 : 10)));
+
+        // 半圆弧点：从 tipLeft 绕外侧扫到 tipRight
+        // tipLeft 在中心轴左侧（finalDir + π/2），tipRight 在右侧（finalDir - π/2）
+        const startAngle = finalDir + Math.PI * 0.5;  // 指向 tipLeft
+        const sweepAngle = Math.PI * smoothAmt;        // 0→平头，1→完整半圆
+        const arcPts = [];
+        for (let j = 0; j <= arcSteps; j++) {
+          const a = startAngle - (sweepAngle * j / arcSteps);
+          arcPts.push([
+            tipMidX + Math.cos(a) * arcR,
+            tipMidY + Math.sin(a) * arcR
+          ]);
+        }
+
+        poly = [
+          ...leftEdge.slice(0, -1),
+          ...arcPts,
+          ...rightRev.slice(1)
+        ];
+      } else {
+        poly = [...leftEdge, ...rightRev];
+      }
+
+      const cornerIters = Math.min(animPlaying ? 2 : 3, Math.floor(1 + smoothAmt * (animPlaying ? 2.2 : 3)));
+      if (cornerIters > 0) {
         poly = subdivide(poly, true);
-        if (smoothAmt > 0.4) poly = subdivide(poly, true);
-        poly = chaikin(poly, stamIters, true);
+        if (!animPlaying && count <= 14 && smoothAmt > 0.78) poly = subdivide(poly, true);
+        poly = chaikin(poly, cornerIters, true);
       }
 
       p.beginShape();
