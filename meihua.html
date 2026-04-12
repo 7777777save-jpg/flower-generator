@@ -2268,7 +2268,6 @@ function exportPatternSVG() {
 
   const gridN = parseInt(patSlDensity.value);
   const layout = buildPatternLayout(width, height, gridN, patLayoutMode);
-
   rng.s = 0xcafebabe ^ (gridN * 0x9e3779b9 | 0);
   for (const placement of layout.placements) {
     const { row, col } = placement;
