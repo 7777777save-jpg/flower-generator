@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="utf-8">
-  <title>送你一朵花</title>
+  <title>水的14种变奏</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -115,20 +115,24 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
-    #btnAnim, #btnExport, #btnRandom, #btnTest {
+    #btnAnim, #btnExport, #btnRandom, #btnTest, #btnPattern {
       padding: 9px 0;
       border: none; border-radius: 6px;
       font-size: 12px; letter-spacing: .06em;
       cursor: pointer; transition: background .15s;
     }
-    #btnAnim   { background: #1a1a1a; color: #fff; }
-    #btnAnim:hover   { background: #444; }
-    #btnExport { background: #f0f0f0; color: #333; }
-    #btnExport:hover { background: #ddd; }
-    #btnRandom { background: #e8f0fe; color: #3a5fc8; }
-    #btnRandom:hover { background: #c5d5f8; }
-    #btnTest { background: #f5efe4; color: #8b6b36; }
-    #btnTest:hover { background: #e9dbc1; }
+    #btnAnim, #btnExport, #btnRandom {
+      background: #f0f0f0; color: #333;
+    }
+    #btnAnim:hover, #btnExport:hover, #btnRandom:hover {
+      background: #ddd;
+    }
+    #btnTest, #btnPattern {
+      background: #1a1a1a; color: #fff;
+    }
+    #btnTest:hover, #btnPattern:hover {
+      background: #444;
+    }
     #info {
       font-size: 10px; color: #ccc; text-align: center;
       padding: 8px 20px 12px; letter-spacing: .03em;
@@ -226,6 +230,256 @@
     }
     .q-progress span {
       color: #3a5fc8; font-weight: 600;
+    }
+
+    /* ── 图案化界面 ─────────────────────────────────────────────── */
+    #pattern-screen {
+      --pattern-left-w: 300px;
+      --pattern-mid-w: 520px;
+      --pattern-top-h: 520px;
+      --pattern-bottom-h: calc(var(--pattern-left-w) + var(--pattern-mid-w));
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.10);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: var(--pattern-left-w) var(--pattern-mid-w);
+      grid-template-rows: var(--pattern-top-h) var(--pattern-bottom-h);
+      align-items: stretch;
+      width: calc(var(--pattern-left-w) + var(--pattern-mid-w));
+      height: calc(var(--pattern-top-h) + var(--pattern-bottom-h));
+      min-height: calc(var(--pattern-top-h) + var(--pattern-bottom-h));
+      max-height: calc(var(--pattern-top-h) + var(--pattern-bottom-h));
+    }
+    .pat-loading-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(4px);
+      z-index: 30;
+    }
+    .pat-loading-overlay.show {
+      display: flex;
+    }
+    .pat-loading-card {
+      min-width: 240px;
+      padding: 16px 20px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.96);
+      border: 1px solid #ececec;
+      box-shadow: 0 10px 28px rgba(0,0,0,.08);
+      text-align: center;
+    }
+    .pat-loading-title {
+      font-size: 12px;
+      color: #222;
+      letter-spacing: .06em;
+      margin-bottom: 6px;
+    }
+    .pat-loading-sub {
+      font-size: 11px;
+      color: #999;
+      line-height: 1.5;
+    }
+    #pat-fallback-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 28px;
+      transform: translateX(-50%) translateY(10px);
+      opacity: 0;
+      pointer-events: none;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(26,26,26,0.94);
+      color: #fff;
+      font-size: 12px;
+      letter-spacing: .04em;
+      box-shadow: 0 10px 26px rgba(0,0,0,.18);
+      transition: opacity .18s ease, transform .18s ease;
+      z-index: 99999;
+    }
+    #pat-fallback-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .pat-left {
+      grid-column: 1;
+      grid-row: 1;
+      background: white;
+      border-right: 1px solid #eee;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding: 0;
+      height: 100%;
+      min-height: 0;
+    }
+    .pat-left-stage {
+      width: 100%;
+      height: var(--pattern-top-h);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 18px 20px;
+    }
+    .pat-left-label {
+      font-size: 10px; color: #bbb; letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .pat-left img { max-width: 240px; max-height: 240px; display: block;
+      border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+    .pat-middle {
+      grid-column: 2;
+      grid-row: 1;
+      background: white;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      height: 100%;
+      min-height: 0;
+    }
+    .pat-pattern {
+      grid-column: 1 / span 2;
+      grid-row: 2;
+      display: flex;
+      align-items: center; justify-content: center;
+      background: white;
+      border-top: 1px solid #eee;
+      overflow: hidden;
+      height: 100%;
+      min-height: 0;
+      padding: 10px;
+    }
+    .pat-canvas-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      line-height: 0;
+      background: white;
+      border: 1px solid #f0f0f0;
+      box-shadow: none;
+      flex-shrink: 1;
+    }
+    #pat-canvas-host {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #pat-canvas-host canvas { display: block; }
+    .pat-mag-btn {
+      position: absolute; top: 8px; right: 8px;
+      width: 30px; height: 30px;
+      border: none; border-radius: 6px; cursor: pointer;
+      background: rgba(255,255,255,0.88); backdrop-filter: blur(4px);
+      font-size: 15px; line-height: 30px; text-align: center;
+      box-shadow: 0 1px 6px rgba(0,0,0,.15);
+      transition: background .15s; z-index: 10;
+    }
+    .pat-mag-btn:hover { background: rgba(240,240,240,0.95); }
+    .pat-mag-btn.active { background: #1a1a1a; color: #fff; }
+    #pat-magnifier {
+      position: absolute; width: 160px; height: 160px;
+      border-radius: 50%; border: 2px solid rgba(0,0,0,.3);
+      overflow: hidden; pointer-events: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,.25);
+      display: none;
+    }
+    #pat-magnifier canvas { display: block; }
+    .pat-header {
+      padding: 12px 16px 8px;
+      border-bottom: 1px solid #eee;
+      display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0;
+    }
+    .pat-title {
+      font-size: 11px; font-weight: 600; color: #888;
+      letter-spacing: .08em; text-transform: uppercase;
+    }
+    .pat-back-btn {
+      border: none; background: none; cursor: pointer;
+      font-size: 12px; color: #aaa; padding: 0; line-height: 1;
+    }
+    .pat-back-btn:hover { color: #333; }
+    #pat-controls-scroll {
+      flex: 1;
+      overflow: visible;
+      min-height: 0;
+    }
+    .pat-export-row {
+      padding: 10px 16px 12px;
+      border-top: 1px solid #eee;
+      flex-shrink: 0;
+    }
+    .pat-export-row button {
+      width: 100%; padding: 9px 0;
+      border: none; border-radius: 6px;
+      background: #1a1a1a; color: #fff;
+      font-size: 12px; letter-spacing: .06em; cursor: pointer;
+    }
+    .pat-export-row button:hover { background: #444; }
+    .pat-middle .group-label {
+      padding: 8px 16px 2px;
+    }
+    .pat-layout-row {
+      padding: 8px 16px 10px;
+      border-bottom: 1px solid #f3f3f3;
+    }
+    .pat-layout-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .pat-layout-btn {
+      border: 1px solid #e5e5e5;
+      border-radius: 7px;
+      background: #fafafa;
+      color: #777;
+      font-size: 11px;
+      letter-spacing: .04em;
+      padding: 8px 0;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, color .15s;
+    }
+    .pat-layout-btn:hover {
+      border-color: #d3d3d3;
+      background: #f4f4f4;
+      color: #555;
+    }
+    .pat-layout-btn.active {
+      border-color: #1a1a1a;
+      background: #1a1a1a;
+      color: #fff;
+    }
+    .pat-middle .ctrl-row {
+      padding: 6px 16px;
+      gap: 10px;
+    }
+    .pat-middle .ctrl-label {
+      min-width: 92px;
+      font-size: 10px;
+    }
+    .pat-middle .val-display {
+      min-width: 34px;
+      font-size: 10px;
+    }
+    .pat-middle .sub-row {
+      padding-top: 4px;
+      padding-bottom: 4px;
+      padding-left: 28px;
+    }
+    .pat-middle .sub-row .ctrl-label {
+      min-width: 54px;
     }
   </style>
 </head>
@@ -371,11 +625,77 @@
       <button id="btnRandom" onclick="randomize()">⚄ 随机</button>
       <button id="btnTest" onclick="openQuestionnaire()">测试</button>
       <button id="btnExport" onclick="exportPNG()">导出 PNG</button>
+      <button id="btnPattern" onclick="openPattern()" style="grid-column:1/-1;">图案化</button>
     </div>
 
   </div><!-- #controls -->
 
 </div><!-- #card -->
+
+<!-- ── 图案化界面 ──────────────────────────────────────────────────── -->
+<div id="pattern-screen" class="panel-hidden">
+  <div class="pat-loading-overlay" id="patLoadingOverlay">
+    <div class="pat-loading-card">
+      <div class="pat-loading-title">图案生成加载中</div>
+      <div class="pat-loading-sub">正在为第二界面生成结构与排布。<br>如果等待过久，会自动返回第一界面。</div>
+    </div>
+  </div>
+  <!-- 左：结构参考源 -->
+  <div class="pat-left">
+    <div class="pat-left-stage">
+      <div class="pat-left-label">生成结构</div>
+      <img id="patRefImg" src="" alt="生成结构">
+    </div>
+  </div>
+
+  <!-- 右上：参数面板（仅内型，无 EASE / SIZE） -->
+  <div class="pat-middle">
+    <div class="pat-header">
+      <button class="pat-back-btn" onclick="closePattern()">← 返回</button>
+      <span class="pat-title">图案化参数</span>
+    </div>
+    <div id="pat-controls-scroll">
+      <div class="pat-layout-row">
+        <div class="group-label">连续方式</div>
+        <div class="pat-layout-buttons">
+          <button class="pat-layout-btn active" id="patLayoutBasic" onclick="setPatternLayout('basic')">基础平铺</button>
+          <button class="pat-layout-btn" id="patLayoutOffset" onclick="setPatternLayout('offset')">半错位</button>
+          <button class="pat-layout-btn" id="patLayoutTriangle" onclick="setPatternLayout('triangle')">三角连续</button>
+          <button class="pat-layout-btn" id="patLayoutBrick" onclick="setPatternLayout('brick')">砖墙式</button>
+          <button class="pat-layout-btn" id="patLayoutDiamond" onclick="setPatternLayout('diamond')">菱形连续</button>
+        </div>
+      </div>
+      <!-- 排布控制 -->
+      <div class="ctrl-group">
+        <div class="group-label">排布</div>
+        <div class="ctrl-row">
+          <span class="ctrl-label">DENSITY  密度</span>
+          <div class="slider-wrap"><input type="range" id="patSlDensity" min="4" max="20" step="1" value="10"></div>
+          <span class="val-display" id="patValDensity">10×10</span>
+        </div>
+      </div>
+    </div>
+    <div class="pat-export-row">
+      <button onclick="exportPatternSVG()">导出图案 SVG</button>
+    </div>
+  </div>
+
+  <!-- 右下：图案结果 -->
+  <div class="pat-pattern">
+    <div class="pat-canvas-wrap" id="pat-canvas-wrap">
+      <div id="pat-canvas-host"></div>
+      <!-- 放大镜镜头（跟随鼠标） -->
+      <div id="pat-magnifier">
+        <canvas id="pat-mag-canvas" width="160" height="160"></canvas>
+      </div>
+      <!-- 放大镜开关按钮 -->
+      <button class="pat-mag-btn" id="patMagBtn" onclick="toggleMagnifier()" title="放大镜">🔍</button>
+    </div>
+  </div>
+</div><!-- #pattern-screen -->
+
+<div id="pat-fallback-toast">图案化加载超时，已自动返回第一界面。</div>
+
 </div><!-- #zoom-wrap -->
 
 <div id="questionnaire-screen" class="panel-hidden">
@@ -658,8 +978,17 @@ function submitPersonality() {
 }
 // ── 花瓣参数 ──────────────────────────────────────────────────
 const N = 5, orbit = 120, r0 = 40, R = 150;
+
+function computePetalGeom(ease) {
+  const rPetal = r0 + (R - r0) * ease;
+  // 统一受同一个最大外接圆半径 R 约束：
+  // 五瓣状态不会比圆形状态更大，后续印到圆形物料上更稳定。
+  const dOrbit = Math.max(0, R - rPetal);
+  return { rPetal, dOrbit, outerRadius: R };
+}
 const sinPN = Math.sin(Math.PI / N);
-const eCrit = (orbit * sinPN - r0) / (orbit * sinPN + R - r0);
+const rCrit = (R * sinPN) / (1 + sinPN);
+const eCrit = (rCrit - r0) / (R - r0);
 const eMin  = eCrit + 0.01;
 const eMax  = 0.999;
 
@@ -771,6 +1100,10 @@ function subdivide(pts, closed) {
 
 // 花蕊离屏缓冲（融合用）
 let stamenBuf = null;
+let sharedDrawCore = null;
+let sharedDrawStamens = null;
+let sharedBuildCorePolygon = null;
+let sharedBuildStamenShapes = null;
 
 // ── p5 ───────────────────────────────────────────────────────
 // 计算三层实际强度（归一化权重 × perturb）
@@ -791,7 +1124,389 @@ function getPerturbAmounts() {
   };
 }
 
-new p5(function(p) {
+// ── 中心核半径函数（p5 外部，纯 Math）─────────────────────────────
+function coreR(θ, base, axis, structAmt, boundAmt) {
+  let r = base;
+  if (axis > 0) {
+    const axisAmt = Math.pow(axis, 1.08);
+    const spike =
+        0.26 * Math.pow(Math.max(0, Math.cos(3  * θ + 0.7)), 3)
+      + 0.18 * Math.pow(Math.max(0, Math.cos(5  * θ - 0.9)), 4)
+      + 0.17 * Math.pow(Math.max(0, Math.cos(7  * θ + 2.1)), 5)
+      + 0.11 * Math.pow(Math.max(0, Math.cos(9  * θ - 1.4)), 6)
+      + 0.08 * Math.pow(Math.max(0, Math.cos(11 * θ + 0.5)), 7);
+    const crown =
+        0.05 * Math.pow(Math.max(0, Math.cos(13 * θ - 0.2)), 7)
+      + 0.04 * Math.pow(Math.max(0, Math.cos(15 * θ + 1.1)), 8);
+    const spikeMix = spike + axisAmt * crown;
+    r *= (1 + axisAmt * spikeMix * (1.02 + axisAmt * 0.34));
+  }
+  if (structAmt > 0) {
+    r *= (1 + structAmt * 0.22 * evalNoise(HARM_STRUCT, θ));
+  }
+  if (boundAmt > 0) {
+    const fq = 6 + boundAmt * 22;
+    const micro =
+        0.55 * Math.sin(fq        * θ + 1.3)
+      + 0.30 * Math.sin(fq * 1.6  * θ + 2.7)
+      + 0.15 * Math.sin(fq * 2.5  * θ + 0.5);
+    r *= (1 + Math.sqrt(boundAmt) * 0.08 * micro);
+  }
+  return Math.max(r, 1);
+}
+
+// ── 共享几何：中心质量参数（p5 外部，主 sketch 和图案 sketch 共用）──────
+function computeCoreGeom(ease, sizeFac) {
+  const { rPetal, dOrbit } = computePetalGeom(ease);
+  const sinPN   = Math.sin(Math.PI / N);
+  const cosPN   = Math.cos(Math.PI / N);
+  const disc0   = rPetal*rPetal - dOrbit*dOrbit*sinPN*sinPN;
+  const minBound= disc0 > 0 ? dOrbit*cosPN + Math.sqrt(disc0) : rPetal;
+  const base    = 6 + (minBound * 0.86 - 6) * sizeFac;
+  return { base, rPetal, dOrbit, minBound };
+}
+
+// ── 共享边界场：每帧只计算一次中心边界与花瓣约束 ────────────────────────
+function buildCoreField(ease, sizeFac, axis, structAmt, boundAmt, smoothAmt, count) {
+  const { base, rPetal, dOrbit, minBound } = computeCoreGeom(ease, sizeFac);
+  const sampleCount = animPlaying
+    ? (count > 20 ? 160 : 192)
+    : (smoothAmt > 0.6 ? 240 : 216);
+  const petalBounds = new Array(sampleCount);
+  const radii = new Array(sampleCount);
+  const TWO_PI = Math.PI * 2;
+  const HALF_PI = Math.PI / 2;
+
+  function petalBoundRaw(θ) {
+    let maxRho = 0;
+    for (let i = 0; i < N; i++) {
+      const a   = TWO_PI / N * i - HALF_PI;
+      const px  = Math.cos(a) * dOrbit;
+      const py  = Math.sin(a) * dOrbit;
+      const proj= px * Math.cos(θ) + py * Math.sin(θ);
+      const perp= px * Math.sin(θ) - py * Math.cos(θ);
+      const disc= rPetal * rPetal - perp * perp;
+      if (disc >= 0) maxRho = Math.max(maxRho, proj + Math.sqrt(disc));
+    }
+    return maxRho;
+  }
+
+  for (let i = 0; i < sampleCount; i++) {
+    const θ = TWO_PI * i / sampleCount;
+    const bound = petalBoundRaw(θ);
+    petalBounds[i] = bound;
+
+    let r = coreR(θ, base, axis, structAmt, boundAmt);
+    if (bound > 0) {
+      const limit = bound * 0.97;
+      const softStart = limit * 0.68;
+      if (r > softStart) {
+        const room = limit - softStart;
+        r = softStart + room * Math.tanh((r - softStart) / room);
+      }
+    }
+    radii[i] = r;
+  }
+
+  function lookup(arr, θ) {
+    let t = θ % TWO_PI;
+    if (t < 0) t += TWO_PI;
+    const pos = t / TWO_PI * sampleCount;
+    const i0 = Math.floor(pos) % sampleCount;
+    const i1 = (i0 + 1) % sampleCount;
+    const mix = pos - Math.floor(pos);
+    return arr[i0] + (arr[i1] - arr[i0]) * mix;
+  }
+
+  return {
+    base,
+    rPetal,
+    dOrbit,
+    minBound,
+    sample: (θ) => lookup(radii, θ),
+    petalBoundAt: (θ) => lookup(petalBounds, θ)
+  };
+}
+
+function buildCorePolygon(cx, cy, field, smoothAmt, highQuality = false) {
+  const { base, sample } = field;
+  const steps = highQuality ? 320 : (animPlaying ? 180 : 240);
+  let pts = Array.from({ length: steps }, (_, i) => {
+    const θ = Math.PI * 2 * i / steps;
+    const r = sample(θ);
+    return [cx + Math.cos(θ) * r, cy + Math.sin(θ) * r];
+  });
+
+  if (smoothAmt > 0) {
+    const blend = Math.pow(smoothAmt, 0.9);
+    pts = pts.map(([x, y]) => {
+      const dx = x - cx;
+      const dy = y - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 0.001) return [x, y];
+      const angle = Math.atan2(dy, dx);
+      const newR = dist + (base - dist) * blend;
+      return [cx + Math.cos(angle) * newR, cy + Math.sin(angle) * newR];
+    });
+  }
+
+  const maxIters = highQuality ? 6 : (animPlaying ? 4 : 5);
+  const iterFactor = highQuality ? 4.8 : (animPlaying ? 3.4 : 4.2);
+  const iters = Math.min(maxIters, Math.floor(1 + smoothAmt * iterFactor));
+  if (iters > 0) {
+    pts = subdivide(pts, true);
+    if (smoothAmt > 0.35) pts = subdivide(pts, true);
+    if (highQuality && smoothAmt > 0.72) pts = subdivide(pts, true);
+    pts = chaikin(pts, iters, true);
+  }
+
+  return pts;
+}
+
+function buildStamenShapes(cx, cy, field, sizeFac, smoothAmt, bendAmt, boundAmt,
+                           count, lenFac, thickFac, taper, rhythm, spread,
+                           highQuality = false) {
+  if (count === 0) return [];
+
+  const { base, minBound, sample, petalBoundAt } = field;
+  const TWO_PI = Math.PI * 2;
+  const HALF_PI = Math.PI / 2;
+  const fastMode = !highQuality && animPlaying;
+
+  function rhythmMod(θ) {
+    return 0.50 * Math.cos(2 * θ + 0.3)
+         + 0.30 * Math.cos(3 * θ - 0.8)
+         + 0.20 * Math.cos(5 * θ + 1.1);
+  }
+
+  function lengthScale(θ) {
+    const s = 1 + rhythm * 0.65 * rhythmMod(θ)
+                + boundAmt * 0.35 * evalNoise(HARM_BOUND, θ);
+    return Math.max(0.15, s);
+  }
+
+  const lenMax = minBound * 0.92;
+  const extraLen = (lenMax - base) * lenFac;
+  const sizeEase = 1 - Math.pow(1 - sizeFac, 2);
+  const maxW = (1 + (12 - 1) * thickFac) * (1 + sizeEase * 1.5);
+
+  function widthProfile(t) {
+    const fMidThin  = 1 - Math.sin(Math.PI * t);
+    const fTipThick = t;
+    const fFlat     = 1;
+    const fTipThin  = 1 - t;
+    const fMidThick = Math.sin(Math.PI * t);
+    let v;
+    if (taper <= -1)      v = fMidThin  + (fTipThick - fMidThin)  * (taper + 2);
+    else if (taper <= 0)  v = fTipThick + (fFlat - fTipThick)     * (taper + 1);
+    else if (taper <= 1)  v = fFlat     + (fTipThin - fFlat)      * taper;
+    else                  v = fTipThin  + (fMidThick - fTipThin)  * (taper - 1);
+    return Math.max(v, 0.18);
+  }
+
+  const K_ROOT = 3.0;
+  function effectiveWidth(t, cutRatio) {
+    const tVisible = Math.max(0, Math.min(1, (t - cutRatio) / Math.max(0.001, 1 - cutRatio)));
+    const baseW = widthProfile(tVisible);
+    const rootBoost = 1 + sizeFac * K_ROOT * Math.pow(1 - tVisible, 1.5);
+    return baseW * rootBoost;
+  }
+
+  const spreadAbs = Math.abs(spread);
+  const spreadSign = spread >= 0 ? 1 : -1;
+  const spreadPower = Math.pow(spreadAbs, 1.8) * spreadSign;
+  const primaryClusterCount = Math.max(4, Math.min(7, Math.round(4 + count / 10)));
+  const accentClusterCount = Math.max(3, Math.min(6, Math.round(3 + count / 14)));
+  const primarySigma = 0.24;
+  const accentSigma = 0.14;
+  const clusterCenters = [];
+
+  for (let k = 0; k < primaryClusterCount; k++) {
+    const baseθ = TWO_PI / primaryClusterCount * k + count * 0.21;
+    const offset = 0.14 * Math.sin(k * 1.7 + count * 0.13 + rhythm * 2.4);
+    const weight = 0.9 + 0.32 * Math.sin(k * 1.9 + lenFac * 3.0 + spreadAbs * 2.1);
+    clusterCenters.push({ θ: baseθ + offset, sigma: primarySigma, weight });
+  }
+
+  for (let k = 0; k < accentClusterCount; k++) {
+    const baseθ = TWO_PI / accentClusterCount * (k + 0.5) - count * 0.11;
+    const offset = 0.18 * Math.sin(k * 2.3 + taper * 1.8 - rhythm * 1.5);
+    const weight = 0.42 + 0.20 * Math.cos(k * 2.1 + thickFac * 2.6 + spreadAbs * 1.7);
+    clusterCenters.push({ θ: baseθ + offset, sigma: accentSigma, weight });
+  }
+
+  function density(θ) {
+    let d = 0;
+    for (const cluster of clusterCenters) {
+      let dθ = θ - cluster.θ;
+      while (dθ > Math.PI) dθ -= TWO_PI;
+      while (dθ < -Math.PI) dθ += TWO_PI;
+      d += cluster.weight * Math.exp(-(dθ * dθ) / (cluster.sigma * cluster.sigma));
+    }
+    const ribbon =
+      0.26 * Math.max(0, Math.cos(6 * θ + rhythm * 2.4 - 0.6)) +
+      0.18 * Math.max(0, Math.cos(9 * θ - taper * 1.5 + 0.9)) +
+      0.10 * Math.max(0, Math.cos(12 * θ + spreadAbs * 2.2 - 1.4));
+    return d + ribbon;
+  }
+
+  function intervalWeight(θ) {
+    const d = density(θ);
+    if (spreadPower >= 0) return 1 + spreadPower * d * 2.8;
+    return Math.max(0.02, 1 + spreadPower * d * 2.8);
+  }
+
+  const rawAngles = [];
+  {
+    const sampleCount = highQuality ? 320 : (fastMode ? 180 : 240);
+    const sampleWeights = Array.from({ length: sampleCount }, (_, k) =>
+      intervalWeight(TWO_PI / sampleCount * k)
+    );
+    const totalW = sampleWeights.reduce((a, b) => a + b, 0);
+    const cdf = [];
+    let acc = 0;
+    for (let k = 0; k < sampleCount; k++) {
+      acc += sampleWeights[k] / totalW;
+      cdf.push(acc);
+    }
+    let idx = 0;
+    for (let i = 0; i < count; i++) {
+      const target = (i + 0.5) / count;
+      while (idx < sampleCount - 1 && cdf[idx] < target) idx++;
+      rawAngles.push(TWO_PI / sampleCount * idx - HALF_PI);
+    }
+  }
+
+  const perfLoad = (fastMode ? 0.45 : 0) + (count / 40) * 0.35 + smoothAmt * 0.25;
+  const steps = highQuality
+    ? Math.max(18, Math.round(28 - smoothAmt * 5 - (count / 40) * 5))
+    : Math.max(14, Math.round(20 - perfLoad * 8));
+  const shapes = [];
+
+  for (let i = 0; i < count; i++) {
+    const θ = rawAngles[i];
+    const boundR = sample(θ);
+    const rootProfile = widthProfile(0);
+    const rootBoost = 1 + sizeFac * K_ROOT;
+    const rootW = Math.max(1, rootProfile * rootBoost * maxW);
+    const retreat = Math.max(4, rootW * 0.9 + 2);
+    const insertDepth = Math.max(8, rootW * 1.15 + 6 + sizeFac * 10);
+    const startR = Math.max(base * 0.52, boundR - retreat - insertDepth);
+    const scaledExtra = extraLen * lengthScale(θ);
+    const maxEnd = petalBoundAt(θ) - maxW - 2;
+    const endR = Math.min(boundR + scaledExtra, Math.max(maxEnd, boundR + 1));
+    const pathLen = endR - startR;
+    const stepLen = pathLen / steps;
+    const cutRatio = Math.max(0, Math.min(0.95, (boundR - startR) / Math.max(0.001, pathLen)));
+
+    const seed = θ * 1.7 + 0.9;
+    const freq = 3.0;
+    const bendScale = bendAmt * 2.0;
+
+    const pxArr = [cx + Math.cos(θ) * startR];
+    const pyArr = [cy + Math.sin(θ) * startR];
+    const dirArr = [θ];
+
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      const dir = θ + bendScale * evalNoise(HARM_BEND, t * freq + seed);
+      pxArr.push(pxArr[s - 1] + Math.cos(dir) * stepLen);
+      pyArr.push(pyArr[s - 1] + Math.sin(dir) * stepLen);
+      dirArr.push(dir);
+    }
+
+    const left = [];
+    const right = [];
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const w = effectiveWidth(t, cutRatio) * maxW;
+      const dir = dirArr[s];
+      const nx = -Math.sin(dir);
+      const ny = Math.cos(dir);
+      left.push([pxArr[s] + nx * w, pyArr[s] + ny * w]);
+      right.push([pxArr[s] - nx * w, pyArr[s] - ny * w]);
+    }
+
+    const bridgeHalfAngle = Math.min(0.42, Math.max(0.08, rootW / Math.max(boundR, 1) * 1.35));
+    const bridgeInset = Math.max(2, rootW * 0.28);
+    const bridgeInnerR = Math.max(base * 0.4, startR - Math.max(10, rootW * 0.9));
+    const bridgeArc = [];
+    const bridgeSteps = highQuality ? 8 : Math.max(4, Math.round(6 - perfLoad * 2));
+    for (let j = 0; j <= bridgeSteps; j++) {
+      const ang = θ - bridgeHalfAngle + (2 * bridgeHalfAngle * j / bridgeSteps);
+      const r = Math.max(base * 0.78, sample(ang) - bridgeInset);
+      bridgeArc.push([cx + Math.cos(ang) * r, cy + Math.sin(ang) * r]);
+    }
+
+    let leftEdge = left;
+    let rightEdge = right;
+    const stamIters = highQuality
+      ? Math.min(5, Math.floor(1 + smoothAmt * 4))
+      : Math.min(animPlaying ? 3 : 4, Math.floor(1 + smoothAmt * (animPlaying ? 2.4 : 3.2)));
+    if (stamIters > 0) {
+      leftEdge = subdivide(leftEdge, false);
+      rightEdge = subdivide(rightEdge, false);
+      if ((highQuality && count <= 22 && smoothAmt > 0.45) || (!highQuality && !animPlaying && count <= 18 && smoothAmt > 0.6)) {
+        leftEdge = subdivide(leftEdge, false);
+        rightEdge = subdivide(rightEdge, false);
+      }
+      leftEdge = chaikin(leftEdge, stamIters, false);
+      rightEdge = chaikin(rightEdge, stamIters, false);
+    }
+
+    const rightRev = rightEdge.slice().reverse();
+    let poly;
+    if (smoothAmt > 0.01 && leftEdge.length >= 1 && rightRev.length >= 1) {
+      const tipLeft = leftEdge[leftEdge.length - 1];
+      const tipRight = rightRev[0];
+      const tipMidX = (tipLeft[0] + tipRight[0]) * 0.5;
+      const tipMidY = (tipLeft[1] + tipRight[1]) * 0.5;
+      const halfGap = Math.hypot(tipLeft[0] - tipRight[0], tipLeft[1] - tipRight[1]) * 0.5;
+      const finalDir = dirArr[steps];
+      const arcR = halfGap;
+      const arcSteps = highQuality
+        ? Math.max(8, Math.round(8 + smoothAmt * 12))
+        : Math.max(4, Math.round(4 + smoothAmt * (animPlaying ? 6 : 10)));
+      const startAngle = finalDir + Math.PI * 0.5;
+      const sweepAngle = Math.PI * smoothAmt;
+      const arcPts = [];
+      for (let j = 0; j <= arcSteps; j++) {
+        const a = startAngle - (sweepAngle * j / arcSteps);
+        arcPts.push([tipMidX + Math.cos(a) * arcR, tipMidY + Math.sin(a) * arcR]);
+      }
+      poly = [...leftEdge.slice(0, -1), ...arcPts, ...rightRev.slice(1)];
+    } else {
+      poly = [...leftEdge, ...rightRev];
+    }
+
+    const cornerIters = highQuality
+      ? Math.min(4, Math.floor(1 + smoothAmt * 4))
+      : Math.min(animPlaying ? 2 : 3, Math.floor(1 + smoothAmt * (animPlaying ? 2.2 : 3)));
+    if (cornerIters > 0) {
+      poly = subdivide(poly, true);
+      if ((highQuality && smoothAmt > 0.65) || (!animPlaying && count <= 14 && smoothAmt > 0.78)) {
+        poly = subdivide(poly, true);
+      }
+      poly = chaikin(poly, cornerIters, true);
+    }
+
+    shapes.push({
+      bridge: [
+        [cx + Math.cos(θ) * bridgeInnerR, cy + Math.sin(θ) * bridgeInnerR],
+        ...bridgeArc,
+        right[0],
+        right[Math.min(2, steps)],
+        left[Math.min(2, steps)],
+        left[0]
+      ],
+      poly
+    });
+  }
+
+  return shapes;
+}
+
+let mainP5 = new p5(function(p) {
   p.setup = function() {
     p.createCanvas(520, 520).parent('sketch-host');
     stamenBuf = p.createGraphics(520, 520);
@@ -815,11 +1530,10 @@ new p5(function(p) {
 
   // ── 花瓣外轮廓 ────────────────────────────────────────────
   function drawPetals(ease) {
-    const r   = p.lerp(r0, R, ease);
+    const { rPetal: r, dOrbit } = computePetalGeom(ease);
     const pos = Array.from({ length: N }, (_, i) => {
       const a = p.TWO_PI / N * i - p.HALF_PI;
-      const d = orbit * (1 - ease);
-      return p.createVector(p.width/2 + Math.cos(a)*d, p.height/2 + Math.sin(a)*d);
+      return p.createVector(p.width/2 + Math.cos(a)*dOrbit, p.height/2 + Math.sin(a)*dOrbit);
     });
 
     p.noStroke(); p.fill(20);
@@ -829,13 +1543,12 @@ new p5(function(p) {
     p.beginShape();
     for (let i = 0; i < N; i++) {
       const a = p.TWO_PI / N * i - p.HALF_PI;
-      const d = orbit * (1 - ease);
-      p.vertex(p.width/2 + Math.cos(a)*d, p.height/2 + Math.sin(a)*d);
+      p.vertex(p.width/2 + Math.cos(a)*dOrbit, p.height/2 + Math.sin(a)*dOrbit);
     }
     p.endShape(p.CLOSE);
 
     p.noFill(); p.stroke(20); p.strokeWeight(1.8);
-    if (orbit*(1-ease) < 1) { p.ellipse(p.width/2, p.height/2, r*2, r*2); return; }
+    if (dOrbit < 1) { p.ellipse(p.width/2, p.height/2, r*2, r*2); return; }
 
     for (let i = 0; i < N; i++) {
       const cx = pos[i].x, cy = pos[i].y;
@@ -851,431 +1564,43 @@ new p5(function(p) {
     }
   }
 
-  // ── 中心核半径函数 ────────────────────────────────────────
-  // structAmt: 低频扰动强度（大形变）
-  // boundAmt:  高频扰动强度（细节纹理）
-  function coreR(θ, base, axis, structAmt, boundAmt) {
-    // axis 0 → 圆形，axis 1 → 尖刺形（跳过方形）
-    let r = base;
+  function drawCore(pInst, cx, cy, field, smoothAmt, fillColor) {
+    const pts = buildCorePolygon(cx, cy, field, smoothAmt, false);
 
-    if (axis > 0) {
-      // 三组不同频率的尖刺叠加，产生有机不规则感
-      const spike =
-          0.35 * Math.pow(Math.max(0, Math.cos(3 * θ + 0.7)), 3)
-        + 0.20 * Math.pow(Math.max(0, Math.cos(7 * θ + 2.1)), 4)
-        + 0.14 * Math.pow(Math.max(0, Math.cos(5 * θ - 0.9)), 4);
-      r *= (1 + axis * spike);
-    }
-
-    // ② structure 扰动（低频，大块起伏）
-    if (structAmt > 0) {
-      r *= (1 + structAmt * 0.22 * evalNoise(HARM_STRUCT, θ));
-    }
-
-    // ③ boundary 扰动：细小起伏，数量随 boundAmt 从 0→1 递增
-    // boundAmt=0 → 无起伏；boundAmt=1 → 最多细小起伏（高频纯净）
-    if (boundAmt > 0) {
-      // 起伏频率从低到高随 boundAmt 增大：约 6→28 个周期
-      const fq = 6 + boundAmt * 22;
-      // 三层细高频叠加，制造有机感（避免单一正弦的"塑料感"）
-      const micro =
-          0.55 * Math.sin(fq        * θ + 1.3)
-        + 0.30 * Math.sin(fq * 1.6  * θ + 2.7)
-        + 0.15 * Math.sin(fq * 2.5  * θ + 0.5);
-      // 振幅平方根映射：低值时已可见，高值时更强但不过分
-      r *= (1 + Math.sqrt(boundAmt) * 0.08 * micro);
-    }
-
-    return Math.max(r, 1);
-  }
-
-  function drawCore() {
-    const cx      = p.width  / 2;
-    const cy      = p.height / 2;
-    const ease    = parseFloat(slEase.value);
-    const sizeFac = parseFloat(slSize.value);
-    const axis    = parseFloat(slAxis.value);
-    const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
-
-    const { base, rPetal, dOrbit } = computeCoreGeom(ease, sizeFac);
-    const sample = makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit);
-
-    const STEPS = 300;
-    let pts = Array.from({ length: STEPS }, (_, i) => {
-      const θ = p.TWO_PI * i / STEPS;
-      const r = sample(θ);
-      return [cx + Math.cos(θ) * r, cy + Math.sin(θ) * r];
-    });
-
-    // 圆润混入：把每个点的半径向 base 纯圆插值
-    // smoothAmt=0 → 原始扰动形状；smoothAmt=1 → 接近完美圆形
-    if (smoothAmt > 0) {
-      const blend = Math.pow(smoothAmt, 0.9);
-      pts = pts.map(([x, y]) => {
-        const dx = x - cx, dy = y - cy;
-        const dist = Math.hypot(dx, dy);
-        if (dist < 0.001) return [x, y];
-        const angle = Math.atan2(dy, dx);
-        const newR  = dist + (base - dist) * blend;
-        return [cx + Math.cos(angle) * newR, cy + Math.sin(angle) * newR];
-      });
-    }
-
-    // ROUND 提高时，中心形状更强地收圆，不只是轻微磨边。
-    const iters = Math.min(8, Math.floor(1 + smoothAmt * 8));
-    if (iters > 0) {
-      pts = subdivide(pts, true);
-      if (smoothAmt > 0.2) pts = subdivide(pts, true);
-      if (smoothAmt > 0.55) pts = subdivide(pts, true);
-      pts = chaikin(pts, iters, true);
-    }
-
-    p.fill(255); p.noStroke();
-    p.beginShape();
-    p.curveVertex(pts[pts.length-1][0], pts[pts.length-1][1]);
-    for (const [x, y] of pts) p.curveVertex(x, y);
-    p.curveVertex(pts[0][0], pts[0][1]);
-    p.curveVertex(pts[1][0], pts[1][1]);
-    p.endShape();
-  }
-
-  // ── 共享几何：中心质量参数 ────────────────────────────────────
-  function computeCoreGeom(ease, sizeFac) {
-    const rPetal  = p.lerp(r0, R, ease);
-    const dOrbit  = orbit * (1 - ease);
-    const sinPN   = Math.sin(Math.PI / N);
-    const cosPN   = Math.cos(Math.PI / N);
-    const disc0   = rPetal*rPetal - dOrbit*dOrbit*sinPN*sinPN;
-    const minBound= disc0 > 0 ? dOrbit*cosPN + Math.sqrt(disc0) : rPetal;
-    const base    = p.lerp(6, minBound * 0.86, sizeFac);
-    return { base, rPetal, dOrbit, minBound };
-  }
-
-  // ── 共享采样器：返回中心形状在角度 θ 的真实绘制半径 ─────────
-  function makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit) {
-    function petalBound(θ) {
-      let maxRho = 0;
-      for (let i = 0; i < N; i++) {
-        const a   = p.TWO_PI / N * i - p.HALF_PI;
-        const px  = Math.cos(a) * dOrbit;
-        const py  = Math.sin(a) * dOrbit;
-        const proj= px * Math.cos(θ) + py * Math.sin(θ);
-        const perp= px * Math.sin(θ) - py * Math.cos(θ);
-        const disc= rPetal * rPetal - perp * perp;
-        if (disc >= 0) maxRho = Math.max(maxRho, proj + Math.sqrt(disc));
-      }
-      return maxRho;
-    }
-    return function(θ) {
-      let r = coreR(θ, base, axis, structAmt, boundAmt);
-      const bound = petalBound(θ);
-      if (bound > 0) {
-        const limit = bound * 0.97;
-        const softStart = limit * 0.68;
-        if (r > softStart) {
-          const room = limit - softStart;
-          r = softStart + room * Math.tanh((r - softStart) / room);
-        }
-      }
-      return r;
-    };
+    pInst.fill(fillColor); pInst.noStroke();
+    pInst.beginShape();
+    pInst.curveVertex(pts[pts.length-1][0], pts[pts.length-1][1]);
+    for (const [x, y] of pts) pInst.curveVertex(x, y);
+    pInst.curveVertex(pts[0][0], pts[0][1]);
+    pInst.curveVertex(pts[1][0], pts[1][1]);
+    pInst.endShape();
   }
 
   // ── 放射结构：路径 + 宽度函数 ──────────────────────────────────
-  function drawStamens() {
-    const cx       = p.width  / 2;
-    const cy       = p.height / 2;
-    const count    = parseInt(slCount.value);
-    const lenFac   = parseFloat(slLength.value);
-    const thickFac = parseFloat(slThick.value);
-    const taper    = parseFloat(slTaper.value);
-    const rhythm   = parseFloat(slRhythm.value);
-    const spread   = parseFloat(slSpread.value);
-
-    if (count === 0) return;
-
-    const ease    = parseFloat(slEase.value);
-    const sizeFac = parseFloat(slSize.value);
-    const axis    = parseFloat(slAxis.value);
-    const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
-    const roundForce = Math.pow(smoothAmt, 0.9);
-
-    const { base, rPetal, dOrbit, minBound } = computeCoreGeom(ease, sizeFac);
-    const sample = makeCoreSampler(base, axis, structAmt, boundAmt, rPetal, dOrbit);
-
-    // ── 长度调制：两层叠加 ────────────────────────────────────
-    // 层1：规则波动（低频谐波，产生有节奏的长短起伏）
-    // 用 3 个固定低频分量，相位错开，形成自然的波形节奏
-    function rhythmMod(θ) {
-      const wave =
-          0.50 * Math.cos(2 * θ + 0.3)       // 2周期：两组长短
-        + 0.30 * Math.cos(3 * θ - 0.8)       // 3周期：三组
-        + 0.20 * Math.cos(5 * θ + 1.1);      // 5周期：细节起伏
-      return wave;   // 范围约 [-1, 1]
-    }
-
-    // 每根花蕊的长度系数：rhythm 规则波动 + boundAmt 高频有机扰动
-    function lengthScale(θ) {
-      const s = 1 + rhythm * 0.65 * rhythmMod(θ)
-                  + boundAmt * 0.35 * evalNoise(HARM_BOUND, θ);
-      return Math.max(0.15, s);
-    }
-
-    const lenMax  = minBound * 0.92;
-    const extraLen = (lenMax - base) * lenFac;
-    // SIZE 越大，花蕊根部越粗（easeOut 使小值时影响柔和）
-    const sizeEase = 1 - Math.pow(1 - sizeFac, 2);   // easeOut
-    const maxW    = p.lerp(1, 12, thickFac) * (1 + sizeEase * 1.5);
-
-    // ── 宽度函数 f(t)，t∈[0,1]，返回 [0..1] ──────────────────
-    // taper -2→+2 连续混合五种基础函数：
-    //  -2: 中间最细  f=1-sin(πt)
-    //  -1: 头粗根细  f=t
-    //   0: 等粗      f=1
-    //  +1: 根粗头细  f=1-t
-    //  +2: 中间最粗  f=sin(πt)
-    function widthProfile(t) {
-      const fMidThin  = 1 - Math.sin(Math.PI * t);
-      const fTipThick = t;
-      const fFlat     = 1;
-      const fTipThin  = 1 - t;
-      const fMidThick = Math.sin(Math.PI * t);
-
-      let v;
-      if (taper <= -1) {
-        v = p.lerp(fMidThin,  fTipThick, taper + 2);
-      } else if (taper <= 0) {
-        v = p.lerp(fTipThick, fFlat,     taper + 1);
-      } else if (taper <= 1) {
-        v = p.lerp(fFlat,     fTipThin,  taper);
-      } else {
-        v = p.lerp(fTipThin,  fMidThick, taper - 1);
-      }
-      // 最细处不低于 maxW 的 18%，保证可见
-      return Math.max(v, 0.18);
-    }
-
-    // SIZE 驱动的根部加宽，基于视觉根部（遮挡边界）重映射 t
-    // cutRatio = 遮挡段占总路径的比例，tVisible 从遮挡边界重新计为 0
-    // thickness = baseThickness × (1 + sizeFac × k × (1 - tVisible))
-    const K_ROOT = 3.0;   // 根部加粗系数
-
-    function effectiveWidth(t, cutRatio) {
-      const tVisible = Math.max(0, Math.min(1, (t - cutRatio) / Math.max(0.001, 1 - cutRatio)));
-      const base = widthProfile(tVisible);
-      const rootBoost = 1 + sizeFac * K_ROOT * Math.pow(1 - tVisible, 1.5);
-      return base * rootBoost;
-    }
-
-    // 花瓣边界函数（与 makeCoreSampler 内部一致）
-    function petalBoundAt(θ) {
-      let maxRho = 0;
-      for (let k = 0; k < N; k++) {
-        const a    = p.TWO_PI / N * k - p.HALF_PI;
-        const px2  = Math.cos(a) * dOrbit;
-        const py2  = Math.sin(a) * dOrbit;
-        const proj = px2 * Math.cos(θ) + py2 * Math.sin(θ);
-        const perp = px2 * Math.sin(θ) - py2 * Math.cos(θ);
-        const disc = rPetal * rPetal - perp * perp;
-        if (disc >= 0) maxRho = Math.max(maxRho, proj + Math.sqrt(disc));
-      }
-      return maxRho;
-    }
-
-    p.fill(255); p.noStroke();
-
-    // ── 角度分布：多峰聚集分布（增强版）────────────────────────────
-    // spread > 0 → 花蕊聚向 cluster 中心（密集感）
-    // spread < 0 → 花蕊逃离 cluster 中心（反聚集，更均匀）
-    // 指数映射让效果更加非线性、有冲击感
-    const spreadAbs   = Math.abs(spread);
-    const spreadSign  = spread >= 0 ? 1 : -1;
-    const spreadPower = Math.pow(spreadAbs, 1.8) * spreadSign;
-
-    // 4 个 cluster，位置随 count 整体旋转，避免与花瓣固定对称
-    const CLUSTER_COUNT = 4;
-    const σ = 0.28;   // 较窄 Gaussian，cluster 更集中清晰
-    const clusterCenters = Array.from({ length: CLUSTER_COUNT }, (_, k) =>
-      p.TWO_PI / CLUSTER_COUNT * k + count * 0.21
+  function drawStamens(pInst, cx, cy, field, sizeFac, smoothAmt, bendAmt, boundAmt, fillColor,
+                        count, lenFac, thickFac, taper, rhythm, spread) {
+    const shapes = buildStamenShapes(
+      cx, cy, field, sizeFac, smoothAmt, bendAmt, boundAmt,
+      count, lenFac, thickFac, taper, rhythm, spread, false
     );
+    if (shapes.length === 0) return;
 
-    function density(θ) {
-      let d = 0;
-      for (const c of clusterCenters) {
-        let dθ = θ - c;
-        while (dθ >  Math.PI) dθ -= p.TWO_PI;
-        while (dθ < -Math.PI) dθ += p.TWO_PI;
-        d += Math.exp(-(dθ * dθ) / (σ * σ));
-      }
-      return d;
-    }
+    pInst.fill(fillColor); pInst.noStroke();
+    for (const shape of shapes) {
+      pInst.beginShape();
+      for (const [x, y] of shape.bridge) pInst.vertex(x, y);
+      pInst.endShape(pInst.CLOSE);
 
-    // 权重正确方向：spread > 0 → cluster 附近权重高 → CDF 这段更多样本 → 更多花蕊
-    // spread < 0 → cluster 附近权重低 → 该区域稀疏
-    function intervalWeight(θ) {
-      const d = density(θ);
-      if (spreadPower >= 0) {
-        return 1 + spreadPower * d * 3.5;
-      } else {
-        return Math.max(0.02, 1 + spreadPower * d * 3.5);
-      }
-    }
-
-    const rawAngles = [];
-    {
-      const SAMPLE = 360;
-      const sampleWeights = Array.from({ length: SAMPLE }, (_, k) =>
-        intervalWeight(p.TWO_PI / SAMPLE * k)
-      );
-      const totalW = sampleWeights.reduce((a, b) => a + b, 0);
-      const cdf = [];
-      let acc = 0;
-      for (let k = 0; k < SAMPLE; k++) {
-        acc += sampleWeights[k] / totalW;
-        cdf.push(acc);
-      }
-      for (let i = 0; i < count; i++) {
-        const target = (i + 0.5) / count;
-        let idx = cdf.findIndex(v => v >= target);
-        if (idx < 0) idx = SAMPLE - 1;
-        rawAngles.push(p.TWO_PI / SAMPLE * idx - p.HALF_PI);
-      }
-    }
-
-    // ── 花蕊体 ────────────────────────────────────────────────────
-    p.fill(255); p.noStroke();
-
-    const perfLoad = (animPlaying ? 0.45 : 0) + (count / 40) * 0.35 + smoothAmt * 0.25;
-    const STEPS = Math.max(14, Math.round(20 - perfLoad * 8));
-    for (let i = 0; i < count; i++) {
-      const θ      = rawAngles[i];
-      const boundR = sample(θ);
-      const rootProfile = widthProfile(0);
-      const rootBoost = 1 + sizeFac * K_ROOT;
-      const rootW = Math.max(1, rootProfile * rootBoost * maxW);
-      const retreat = Math.max(4, rootW * 0.9 + 2);
-      // 主动把根部更深地插进中心形状内部，优先消除接缝。
-      const insertDepth = Math.max(8, rootW * 1.15 + 6 + sizeFac * 10);
-      const startR = Math.max(base * 0.52, boundR - retreat - insertDepth);
-      const scaledExtra = extraLen * lengthScale(θ);
-      const maxEnd = petalBoundAt(θ) - maxW - 2;
-      const endR   = Math.min(boundR + scaledExtra, Math.max(maxEnd, boundR + 1));
-      const pathLen = endR - startR;
-      const stepLen = pathLen / STEPS;
-      const cutRatio = Math.max(0, Math.min(0.95, (boundR - startR) / Math.max(0.001, pathLen)));
-
-      const seed = θ * 1.7 + 0.9;
-      const freq = 3.0;
-      const bendScale = bendAmt * 2.0;
-
-      const pxArr = [cx + Math.cos(θ) * startR];
-      const pyArr = [cy + Math.sin(θ) * startR];
-      const dirArr = [θ];
-
-      for (let s = 1; s <= STEPS; s++) {
-        const t   = s / STEPS;
-        const dir = θ + bendScale * evalNoise(HARM_BEND, t * freq + seed);
-        pxArr.push(pxArr[s-1] + Math.cos(dir) * stepLen);
-        pyArr.push(pyArr[s-1] + Math.sin(dir) * stepLen);
-        dirArr.push(dir);
-      }
-
-      const left = [], right = [];
-      for (let s = 0; s <= STEPS; s++) {
-        const t   = s / STEPS;
-        const w   = effectiveWidth(t, cutRatio) * maxW;
-        const dir = dirArr[s];
-        const nx  = -Math.sin(dir), ny = Math.cos(dir);
-        left.push( [pxArr[s] + nx * w, pyArr[s] + ny * w]);
-        right.push([pxArr[s] - nx * w, pyArr[s] - ny * w]);
-      }
-
-      // 在花蕊根部补一块桥接面，让根部与多变的中心边界稳定重叠，
-      // 避免粗细/尖角变化时出现黑色三角缝。
-      const bridgeHalfAngle = Math.min(0.42, Math.max(0.08, rootW / Math.max(boundR, 1) * 1.35));
-      const bridgeInset = Math.max(2, rootW * 0.28);
-      const bridgeInnerR = Math.max(base * 0.4, startR - Math.max(10, rootW * 0.9));
-      const bridgeArc = [];
-      const BRIDGE_STEPS = Math.max(4, Math.round(6 - perfLoad * 2));
-      for (let j = 0; j <= BRIDGE_STEPS; j++) {
-        const ang = θ - bridgeHalfAngle + (2 * bridgeHalfAngle * j / BRIDGE_STEPS);
-        const r = Math.max(base * 0.78, sample(ang) - bridgeInset);
-        bridgeArc.push([cx + Math.cos(ang) * r, cy + Math.sin(ang) * r]);
-      }
-      p.beginShape();
-      p.vertex(cx + Math.cos(θ) * bridgeInnerR, cy + Math.sin(θ) * bridgeInnerR);
-      for (const [x, y] of bridgeArc) p.vertex(x, y);
-      p.vertex(right[0][0], right[0][1]);
-      p.vertex(right[Math.min(2, STEPS)][0], right[Math.min(2, STEPS)][1]);
-      p.vertex(left[Math.min(2, STEPS)][0], left[Math.min(2, STEPS)][1]);
-      p.vertex(left[0][0], left[0][1]);
-      p.endShape(p.CLOSE);
-
-      let leftEdge = left;
-      let rightEdge = right;
-      const stamIters = Math.min(animPlaying ? 3 : 4, Math.floor(1 + smoothAmt * (animPlaying ? 2.4 : 3.2)));
-      if (stamIters > 0) {
-        leftEdge = subdivide(leftEdge, false);
-        rightEdge = subdivide(rightEdge, false);
-        if (!animPlaying && count <= 18 && smoothAmt > 0.6) {
-          leftEdge = subdivide(leftEdge, false);
-          rightEdge = subdivide(rightEdge, false);
-        }
-        leftEdge = chaikin(leftEdge, stamIters, false);
-        rightEdge = chaikin(rightEdge, stamIters, false);
-      }
-
-      const rightRev = rightEdge.slice().reverse();
-
-      // ── 顶端半圆弧：smoothAmt=0 平头，smoothAmt=1 完整半圆 ──────
-      let poly;
-      if (smoothAmt > 0.01 && leftEdge.length >= 1 && rightRev.length >= 1) {
-        const tipLeft  = leftEdge[leftEdge.length - 1];
-        const tipRight = rightRev[0];
-        const tipMidX  = (tipLeft[0] + tipRight[0]) * 0.5;
-        const tipMidY  = (tipLeft[1] + tipRight[1]) * 0.5;
-        const halfGap  = Math.hypot(tipLeft[0] - tipRight[0], tipLeft[1] - tipRight[1]) * 0.5;
-
-        // 最终轴向（花蕊末端实际走向）
-        const finalDir = dirArr[STEPS];
-        const arcR = halfGap;
-        // 弧线步数：smoothAmt=0.5 时 6 步，=1 时 12 步
-        const arcSteps = Math.max(4, Math.round(4 + smoothAmt * (animPlaying ? 6 : 10)));
-
-        // 半圆弧点：从 tipLeft 绕外侧扫到 tipRight
-        // tipLeft 在中心轴左侧（finalDir + π/2），tipRight 在右侧（finalDir - π/2）
-        const startAngle = finalDir + Math.PI * 0.5;  // 指向 tipLeft
-        const sweepAngle = Math.PI * smoothAmt;        // 0→平头，1→完整半圆
-        const arcPts = [];
-        for (let j = 0; j <= arcSteps; j++) {
-          const a = startAngle - (sweepAngle * j / arcSteps);
-          arcPts.push([
-            tipMidX + Math.cos(a) * arcR,
-            tipMidY + Math.sin(a) * arcR
-          ]);
-        }
-
-        poly = [
-          ...leftEdge.slice(0, -1),
-          ...arcPts,
-          ...rightRev.slice(1)
-        ];
-      } else {
-        poly = [...leftEdge, ...rightRev];
-      }
-
-      const cornerIters = Math.min(animPlaying ? 2 : 3, Math.floor(1 + smoothAmt * (animPlaying ? 2.2 : 3)));
-      if (cornerIters > 0) {
-        poly = subdivide(poly, true);
-        if (!animPlaying && count <= 14 && smoothAmt > 0.78) poly = subdivide(poly, true);
-        poly = chaikin(poly, cornerIters, true);
-      }
-
-      p.beginShape();
-      for (const [x, y] of poly) p.vertex(x, y);
-      p.endShape(p.CLOSE);
+      pInst.beginShape();
+      for (const [x, y] of shape.poly) pInst.vertex(x, y);
+      pInst.endShape(pInst.CLOSE);
     }
   }
+
+  sharedDrawCore = drawCore;
+  sharedDrawStamens = drawStamens;
+  sharedBuildCorePolygon = buildCorePolygon;
+  sharedBuildStamenShapes = buildStamenShapes;
 
   p.draw = function() {
     // ── 动画：按指定范围各自独立缓慢循环 ─────────────────────────
@@ -1304,9 +1629,19 @@ new p5(function(p) {
 
     p.background(255);
     const ease = parseFloat(slEase.value);
+    const sizeFac = parseFloat(slSize.value);
+    const axis = parseFloat(slAxis.value);
+    const count = parseInt(slCount.value);
+    const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
+    const field = buildCoreField(ease, sizeFac, axis, structAmt, boundAmt, smoothAmt, count);
+
     drawPetals(ease);
-    drawCore();
-    drawStamens();
+    drawCore(p, p.width/2, p.height/2, field, smoothAmt, 255);
+    drawStamens(p, p.width/2, p.height/2, field, sizeFac, smoothAmt, bendAmt, boundAmt, 255,
+      count,
+      parseFloat(slLength.value), parseFloat(slThick.value),
+      parseFloat(slTaper.value), parseFloat(slRhythm.value), parseFloat(slSpread.value)
+    );
   };
 });
 
@@ -1322,6 +1657,805 @@ function changeZoom(delta) {
   applyZoom();
 }
 applyZoom();
+
+// ── 图案化模式 ───────────────────────────────────────────────────
+
+// 宏观排布滑块
+function bindPatSlider(id, displayId, isGrid) {
+  const sl  = document.getElementById(id);
+  const dsp = document.getElementById(displayId);
+  function update() {
+    const pct = ((parseFloat(sl.value) - parseFloat(sl.min)) /
+                 (parseFloat(sl.max)  - parseFloat(sl.min)) * 100).toFixed(1);
+    sl.style.setProperty('--pct', pct + '%');
+    if (isGrid) {
+      const n = parseInt(sl.value);
+      dsp.textContent = n + '×' + n;
+    } else {
+      dsp.textContent = parseFloat(sl.value).toFixed(2);
+    }
+  }
+  update();
+  sl.addEventListener('input', () => { update(); requestPatternRedraw(); });
+  return sl;
+}
+const patSlDensity = bindPatSlider('patSlDensity', 'patValDensity', true);
+
+function setPatDensityValue(n, shouldRedraw = false) {
+  patSlDensity.value = String(n);
+  const pct = ((parseFloat(patSlDensity.value) - parseFloat(patSlDensity.min)) /
+               (parseFloat(patSlDensity.max) - parseFloat(patSlDensity.min)) * 100).toFixed(1);
+  patSlDensity.style.setProperty('--pct', pct + '%');
+  document.getElementById('patValDensity').textContent = `${parseInt(patSlDensity.value)}×${parseInt(patSlDensity.value)}`;
+  if (shouldRedraw) requestPatternRedraw();
+}
+
+// 状态
+let patBakedEase = 0.5, patBakedSize = 0.4;
+let patternP5 = null;
+let patRedrawRAF = 0;
+let patRedrawTimer = 0;
+let patLastRenderAt = 0;
+let patLayoutMode = 'basic';
+let patOpenTimer = 0;
+let patSceneCacheCanvas = null;
+let patSceneCacheDirty = true;
+let patOpenWatchdogTimer = 0;
+let patPatternReady = false;
+let patFallbackToastTimer = 0;
+let patOpenSession = 0;
+let patPoolBuildTimer = 0;
+// 图形变体池（进入图案化时生成，不随滑块改变）
+let patPool = [];    // [{field, count, lenFac, thickFac, taper, rhythm, spread, smoothAmt, bendAmt, boundAmt}]
+
+// ── 小工具 ─────────────────────────────────────────────────────────
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function rng() {
+  // 轻量 xorshift32，用于可重复但有差异的伪随机序列
+  rng.s = (rng.s ^ (rng.s << 13)) >>> 0;
+  rng.s = (rng.s ^ (rng.s >>> 17)) >>> 0;
+  rng.s = (rng.s ^ (rng.s << 5))  >>> 0;
+  return rng.s / 0x100000000;
+}
+
+function setPatternLayout(mode, shouldRedraw = true) {
+  patLayoutMode = mode;
+  const buttons = {
+    basic: document.getElementById('patLayoutBasic'),
+    offset: document.getElementById('patLayoutOffset'),
+    triangle: document.getElementById('patLayoutTriangle'),
+    brick: document.getElementById('patLayoutBrick'),
+    diamond: document.getElementById('patLayoutDiamond')
+  };
+  Object.entries(buttons).forEach(([key, btn]) => {
+    if (btn) btn.classList.toggle('active', key === mode);
+  });
+  if (shouldRedraw) requestPatternRedraw();
+}
+
+function setPatternLoading(visible, title = '图案生成加载中', sub = '正在为第二界面生成结构与排布。') {
+  const overlay = document.getElementById('patLoadingOverlay');
+  if (!overlay) return;
+  overlay.classList.toggle('show', visible);
+  const titleEl = overlay.querySelector('.pat-loading-title');
+  const subEl = overlay.querySelector('.pat-loading-sub');
+  if (titleEl) titleEl.textContent = title;
+  if (subEl) subEl.innerHTML = sub;
+}
+
+function showPatternFallbackToast(message) {
+  const toast = document.getElementById('pat-fallback-toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  if (patFallbackToastTimer) clearTimeout(patFallbackToastTimer);
+  patFallbackToastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+    patFallbackToastTimer = 0;
+  }, 2200);
+}
+
+function patVariantSignature(v) {
+  return (
+    v.count * 10 +
+    v.lenFac * 4 +
+    v.thickFac * 4 +
+    (v.taper + 2) * 0.8 +
+    v.rhythm * 1.5 +
+    (v.spread + 1) * 1.2 +
+    v.smoothAmt * 1.2 +
+    v.bendAmt * 1.0 +
+    v.boundAmt * 1.0
+  );
+}
+
+function spreadPatternVariants(sortedVariants) {
+  const spread = [];
+  let lo = 0;
+  let hi = sortedVariants.length - 1;
+  while (lo <= hi) {
+    spread.push(sortedVariants[lo]);
+    if (lo !== hi) spread.push(sortedVariants[hi]);
+    lo++;
+    hi--;
+  }
+  const half = Math.ceil(spread.length / 2);
+  const woven = [];
+  for (let i = 0; i < half; i++) {
+    woven.push(spread[i]);
+    const mate = i + half;
+    if (mate < spread.length) woven.push(spread[mate]);
+  }
+  return woven;
+}
+
+function ensurePatternVariantGeometry(variant, highQuality = false) {
+  if (!variant) return null;
+  const key = highQuality ? '_hqGeo' : '_fastGeo';
+  if (variant[key]) return variant[key];
+
+  const extentEst = variant.field.minBound + (variant.field.minBound * 0.92 - variant.field.base) * variant.lenFac;
+  const naturalR = Math.max(8, extentEst);
+  const corePts = sharedBuildCorePolygon(0, 0, variant.field, variant.smoothAmt, highQuality);
+  const stamenShapes = sharedBuildStamenShapes(
+    0, 0, variant.field, patBakedSize, variant.smoothAmt, variant.bendAmt, variant.boundAmt,
+    variant.count, variant.lenFac, variant.thickFac, variant.taper, variant.rhythm, variant.spread, highQuality
+  );
+
+  variant[key] = { naturalR, corePts, stamenShapes };
+  return variant[key];
+}
+
+// ── 生成变体池（分批生成，避免主线程长时间卡死）──────────────────────
+function generatePatPool(onDone = null, sessionId = patOpenSession) {
+  // 从第一阶段烘焙基础参数
+  const base = {
+    axis:    parseFloat(slAxis.value),
+    count:   parseInt(slCount.value),
+    lenFac:  parseFloat(slLength.value),
+    thickFac:parseFloat(slThick.value),
+    taper:   parseFloat(slTaper.value),
+    rhythm:  parseFloat(slRhythm.value),
+    spread:  parseFloat(slSpread.value),
+    perturb: parseFloat(slPerturb.value),
+    structW: parseFloat(slStructW.value),
+    bendW:   parseFloat(slBendW.value),
+    boundW:  parseFloat(slBoundW.value),
+    smoothW: parseFloat(slSmoothW.value),
+  };
+
+  rng.s = 0xdeadbeef ^ (base.count * 0x9e3779b9 | 0);
+
+  const POOL = 96;
+  const variants = [];
+  let i = 0;
+  const BATCH = 10;
+
+  function step() {
+    if (sessionId !== patOpenSession) return;
+    const end = Math.min(POOL, i + BATCH);
+    for (; i < end; i++) {
+      // 第二阶段里适度拉大差异范围，降低重复感，但仍保留同一家族气质
+      const count = clamp(Math.round(base.count + (rng() * 2 - 1) * 5), 0, 40);
+
+      // 连续参数：中等比例扰动
+      const lenFac   = clamp(base.lenFac   * (1 + (rng() * 2 - 1) * 0.14), 0, 1);
+      const thickFac = clamp(base.thickFac * (1 + (rng() * 2 - 1) * 0.14), 0, 1);
+
+      // 其余参数：适度绝对扰动
+      const taper   = clamp(base.taper  + (rng() * 2 - 1) * 0.12, -2, 2);
+      const rhythm  = clamp(base.rhythm + (rng() * 2 - 1) * 0.06, 0, 1);
+      const spread  = clamp(base.spread + (rng() * 2 - 1) * 0.06, -1, 1);
+      const axis    = clamp(base.axis   + (rng() * 2 - 1) * 0.05, 0, 1);
+
+      // 扰动分量（仍然保持同风格，但允许更明显的局部差异）
+      const perturb = clamp(base.perturb + (rng() * 2 - 1) * 0.06, 0, 1);
+      const sW  = clamp(base.structW + (rng() * 2 - 1) * 0.04, 0, 1);
+      const beW = clamp(base.bendW   + (rng() * 2 - 1) * 0.04, 0, 1);
+      const boW = clamp(base.boundW  + (rng() * 2 - 1) * 0.04, 0, 1);
+      const smW = clamp(base.smoothW + (rng() * 2 - 1) * 0.03, 0, 1);
+
+      const total = sW + beW + boW;
+      const smoothAmt = smW;
+      const structAmt = total < 0.001 ? 0 : perturb * sW  / total;
+      const bendAmt   = total < 0.001 ? 0 : perturb * beW / total;
+      const boundAmt  = total < 0.001 ? 0 : perturb * boW / total;
+
+      const field = buildCoreField(patBakedEase, patBakedSize, axis, structAmt, boundAmt, smoothAmt, count);
+      variants.push({ field, count, lenFac, thickFac, taper, rhythm, spread, smoothAmt, bendAmt, boundAmt });
+    }
+
+    if (i < POOL) {
+      patPoolBuildTimer = setTimeout(step, 0);
+      return;
+    }
+
+    // 先按综合形态签名排序，再做首尾交织打散，避免相近形在局部扎堆。
+    variants.sort((a, b) => patVariantSignature(a) - patVariantSignature(b));
+    if (sessionId !== patOpenSession) return;
+    patPool = spreadPatternVariants(variants);
+    patPoolBuildTimer = 0;
+    if (typeof onDone === 'function') onDone();
+  }
+
+  if (patPoolBuildTimer) clearTimeout(patPoolBuildTimer);
+  patPoolBuildTimer = setTimeout(step, 0);
+}
+
+// ── 根据网格坐标获取变体（交错映射确保相邻差异大）────────────────────
+const PAT_ROW_STRIDE = 13;
+const PAT_COL_STRIDE = 31;
+function getVariant(row, col) {
+  if (patPool.length === 0) return null;
+  const idx = ((row * PAT_ROW_STRIDE + col * PAT_COL_STRIDE) % patPool.length + patPool.length) % patPool.length;
+  return patPool[idx];
+}
+
+// ── 均匀度分层采样：选出 n 个要填充的单元格 ──────────────────────────
+function selectFilledCells(rows, cols, fillRate, uniformity) {
+  const total = rows * cols;
+  const n = Math.max(1, Math.round(total * fillRate));
+
+  if (fillRate >= 0.999) {
+    // 全填充
+    const all = [];
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        all.push([r, c]);
+    return all;
+  }
+
+  // 将网格划分为 n 个层（stratum），每层选1格
+  // 层数尽量接近正方形
+  const stratRows = Math.max(1, Math.ceil(Math.sqrt(n * rows / Math.max(1, cols))));
+  const stratCols = Math.max(1, Math.ceil(n / stratRows));
+  const stratH = rows / stratRows;
+  const stratW = cols / stratCols;
+
+  const chosen = [];
+  for (let si = 0; si < stratRows && chosen.length < n; si++) {
+    for (let sj = 0; sj < stratCols && chosen.length < n; sj++) {
+      // 层内基准位置
+      const r0 = si * stratH;
+      const c0 = sj * stratW;
+      // uniformity=1: 取层中心; uniformity=0: 层内随机
+      const jitter = 1 - uniformity;
+      const r = Math.floor(r0 + stratH * (0.5 + (rng() - 0.5) * jitter));
+      const c = Math.floor(c0 + stratW * (0.5 + (rng() - 0.5) * jitter));
+      chosen.push([clamp(r, 0, rows - 1), clamp(c, 0, cols - 1)]);
+    }
+  }
+  return chosen;
+}
+
+// ── 重绘节流 ───────────────────────────────────────────────────────
+function queuePatternCacheRefresh(immediate = false) {
+  patMagCacheDirty = true;
+  if (!magActive) return;
+  if (patMagCacheTimer) clearTimeout(patMagCacheTimer);
+  patMagCacheTimer = setTimeout(() => {
+    patMagCacheTimer = 0;
+    if (!magActive || !patMagCacheDirty) return;
+    rebuildPatternMagnifierCache();
+    if (magActive && patMagHasPoint) renderPatternMagnifier(patMagLastClientX, patMagLastClientY);
+  }, immediate ? 0 : 120);
+}
+
+function rebuildPatternSceneCache() {
+  const patCanvas = document.querySelector('#pat-canvas-host canvas');
+  if (!patCanvas) return;
+  if (!patSceneCacheCanvas) patSceneCacheCanvas = document.createElement('canvas');
+  if (patSceneCacheCanvas.width !== patCanvas.width || patSceneCacheCanvas.height !== patCanvas.height) {
+    patSceneCacheCanvas.width = patCanvas.width;
+    patSceneCacheCanvas.height = patCanvas.height;
+  }
+  const ctx = patSceneCacheCanvas.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  renderPatternVectorScene(ctx, patSceneCacheCanvas.width, patSceneCacheCanvas.height, false, true);
+  patSceneCacheDirty = false;
+  patPatternReady = true;
+  setPatternLoading(false);
+  if (patOpenWatchdogTimer) {
+    clearTimeout(patOpenWatchdogTimer);
+    patOpenWatchdogTimer = 0;
+  }
+}
+
+function flushPatternRedraw() {
+  patRedrawRAF = 0;
+  patLastRenderAt = performance.now();
+  rebuildPatternSceneCache();
+  if (patternP5) patternP5.redraw();
+  queuePatternCacheRefresh(false);
+}
+
+function requestPatternRedraw() {
+  if (patRedrawRAF || patRedrawTimer) return;
+  const now = performance.now();
+  const wait = Math.max(0, 45 - (now - patLastRenderAt));
+  if (wait === 0) {
+    patRedrawRAF = requestAnimationFrame(flushPatternRedraw);
+  } else {
+    patRedrawTimer = setTimeout(() => {
+      patRedrawTimer = 0;
+      patRedrawRAF = requestAnimationFrame(flushPatternRedraw);
+    }, wait);
+  }
+}
+
+function openPattern() {
+  patOpenSession++;
+  // 停止主动画
+  if (animPlaying) { animPlaying = false; syncAnimButton(); window._p5loop(false); }
+
+  // 快照当前花形（直接截 p5 canvas）
+  const mainCanvas = document.querySelector('#sketch-host canvas');
+  if (mainCanvas) document.getElementById('patRefImg').src = mainCanvas.toDataURL();
+
+  // 烘焙外形参数
+  patBakedEase = parseFloat(slEase.value);
+  patBakedSize = parseFloat(slSize.value);
+
+  // 显示图案屏，隐藏主卡片
+  document.getElementById('card').classList.add('panel-hidden');
+  document.getElementById('pattern-screen').classList.remove('panel-hidden');
+  document.getElementById('zoom-controls').style.display = 'none';
+  setPatDensityValue(10, false);
+  setPatternLayout('basic', false);
+  setPatternLoading(true, '图案生成加载中', '正在为第二界面生成结构与排布。<br>如果等待过久，会自动返回第一界面。');
+  patPool = [];
+  patPatternReady = false;
+  patSceneCacheDirty = true;
+  patMagCacheDirty = true;
+  magActive = false;
+  patMagHasPoint = false;
+  document.getElementById('patMagBtn').classList.remove('active');
+  document.getElementById('pat-magnifier').style.display = 'none';
+
+  if (patOpenWatchdogTimer) clearTimeout(patOpenWatchdogTimer);
+  patOpenWatchdogTimer = setTimeout(() => {
+    patOpenWatchdogTimer = 0;
+    const stillInPattern = !document.getElementById('pattern-screen').classList.contains('panel-hidden');
+    if (!stillInPattern || patPatternReady) return;
+    console.warn('Pattern screen render timed out; auto returning to stage 1.');
+    closePattern();
+    showPatternFallbackToast('图案化加载超时，已自动返回第一界面。');
+  }, 1800);
+
+  // 启动或触发图案 p5
+  if (!patternP5) {
+    initPatternSketch();
+  } else {
+    patternP5.redraw();
+  }
+
+  if (patOpenTimer) clearTimeout(patOpenTimer);
+  patOpenTimer = setTimeout(() => {
+    patOpenTimer = 0;
+    const sessionId = patOpenSession;
+    generatePatPool(() => {
+      if (sessionId !== patOpenSession) return;
+      requestPatternRedraw();
+    }, sessionId);
+  }, 16);
+}
+
+function closePattern() {
+  patOpenSession++;
+  if (patOpenTimer) {
+    clearTimeout(patOpenTimer);
+    patOpenTimer = 0;
+  }
+  if (patPoolBuildTimer) {
+    clearTimeout(patPoolBuildTimer);
+    patPoolBuildTimer = 0;
+  }
+  if (patOpenWatchdogTimer) {
+    clearTimeout(patOpenWatchdogTimer);
+    patOpenWatchdogTimer = 0;
+  }
+  setPatternLoading(false);
+  magActive = false;
+  patMagHasPoint = false;
+  document.getElementById('patMagBtn').classList.remove('active');
+  document.getElementById('pat-magnifier').style.display = 'none';
+  document.getElementById('pattern-screen').classList.add('panel-hidden');
+  document.getElementById('card').classList.remove('panel-hidden');
+  document.getElementById('zoom-controls').style.display = '';
+}
+
+function formatSvgNum(v) {
+  return Number(v.toFixed(3));
+}
+
+function transformPatternPoint(pt, tx, ty, scale, angle = 0) {
+  const x = pt[0] * scale;
+  const y = pt[1] * scale;
+  if (!angle) return [tx + x, ty + y];
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+  return [tx + x * cosA - y * sinA, ty + x * sinA + y * cosA];
+}
+
+function polygonToSvgPath(pts, tx, ty, scale, angle = 0) {
+  if (!pts || pts.length === 0) return '';
+  const p0 = transformPatternPoint(pts[0], tx, ty, scale, angle);
+  let d = `M ${formatSvgNum(p0[0])} ${formatSvgNum(p0[1])}`;
+  for (let i = 1; i < pts.length; i++) {
+    const p = transformPatternPoint(pts[i], tx, ty, scale, angle);
+    d += ` L ${formatSvgNum(p[0])} ${formatSvgNum(p[1])}`;
+  }
+  return d + ' Z';
+}
+
+function fillPolygonOnCtx(ctx, pts, tx, ty, scale, angle = 0) {
+  if (!pts || pts.length === 0) return;
+  const p0 = transformPatternPoint(pts[0], tx, ty, scale, angle);
+  ctx.beginPath();
+  ctx.moveTo(p0[0], p0[1]);
+  for (let i = 1; i < pts.length; i++) {
+    const p = transformPatternPoint(pts[i], tx, ty, scale, angle);
+    ctx.lineTo(p[0], p[1]);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function buildPatternLayout(width, height, gridN, mode) {
+  const rows = Math.max(2, gridN);
+  const cols = Math.max(2, Math.round(rows * width / Math.max(1, height)));
+  const placements = [];
+  const byKey = new Map();
+
+  if (mode === 'triangle') {
+    const pitchX = width / (cols + 0.5);
+    const rowFactor = 0.86;
+    const pitchY = height / (1 + (rows - 1) * rowFactor);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const item = {
+          row,
+          col,
+          x: (col + 0.5 + (row % 2) * 0.5) * pitchX,
+          y: pitchY * 0.5 + row * pitchY * rowFactor,
+          angle: ((row + col * 2) % 3) * (Math.PI * 2 / 3)
+        };
+        placements.push(item);
+        byKey.set(`${row}:${col}`, item);
+      }
+    }
+    return { rows, cols, placements, byKey, unit: Math.min(pitchX, pitchY) };
+  }
+
+  if (mode === 'brick') {
+    const brickRows = Math.max(2, Math.round(rows * 0.84));
+    const brickCols = Math.max(3, Math.round(cols * 1.22));
+    const pitchX = width / (brickCols + 0.5);
+    const pitchY = height / brickRows;
+    for (let row = 0; row < brickRows; row++) {
+      for (let col = 0; col < brickCols; col++) {
+        const item = {
+          row,
+          col,
+          x: (col + 0.5 + (row % 2) * 0.5) * pitchX,
+          y: (row + 0.5) * pitchY,
+          angle: (row % 2) * Math.PI
+        };
+        placements.push(item);
+        byKey.set(`${row}:${col}`, item);
+      }
+    }
+    return { rows: brickRows, cols: brickCols, placements, byKey, unit: Math.min(pitchX * 0.88, pitchY) };
+  }
+
+  if (mode === 'offset') {
+    const pitchX = width / (cols + 0.5);
+    const pitchY = height / rows;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const item = {
+          row,
+          col,
+          x: (col + 0.5 + (row % 2) * 0.5) * pitchX,
+          y: (row + 0.5) * pitchY,
+          angle: 0
+        };
+        placements.push(item);
+        byKey.set(`${row}:${col}`, item);
+      }
+    }
+    return { rows, cols, placements, byKey, unit: Math.min(pitchX, pitchY) };
+  }
+
+  if (mode === 'diamond') {
+    const pitch = Math.min(width, height) / (rows + 1.6);
+    const xScale = 0.84;
+    const yScale = 0.42;
+    const centerX = width * 0.5;
+    const centerY = height * 0.5;
+    const extent = rows + cols;
+    const safeMargin = pitch * 1.15;
+    let rowIndex = 0;
+    for (let r = -extent; r <= extent; r++) {
+      let colIndex = 0;
+      for (let c = -extent; c <= extent; c++) {
+        const x = centerX + (c - r) * pitch * xScale;
+        const y = centerY + (c + r) * pitch * yScale;
+        if (x < safeMargin || x > width - safeMargin || y < safeMargin || y > height - safeMargin) continue;
+        const item = {
+          row: rowIndex,
+          col: colIndex,
+          x,
+          y,
+          angle: ((r - c) & 1) ? Math.PI / 4 : -Math.PI / 4
+        };
+        placements.push(item);
+        byKey.set(`${rowIndex}:${colIndex}`, item);
+        colIndex++;
+      }
+      if (colIndex > 0) rowIndex++;
+    }
+    return { rows: Math.max(1, rowIndex), cols: Math.max(1, cols), placements, byKey, unit: pitch };
+  }
+
+  const pitchX = width / cols;
+  const pitchY = height / rows;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const item = {
+        row,
+        col,
+        x: (col + 0.5) * pitchX,
+        y: (row + 0.5) * pitchY,
+        angle: 0
+      };
+      placements.push(item);
+      byKey.set(`${row}:${col}`, item);
+    }
+  }
+  return { rows, cols, placements, byKey, unit: Math.min(pitchX, pitchY) };
+}
+
+function renderPatternVectorScene(ctx, width, height, highQuality = false, drawBackground = true) {
+  if (drawBackground) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+  }
+  if (patPool.length === 0 || !sharedBuildCorePolygon || !sharedBuildStamenShapes) return;
+
+  const gridN = parseInt(patSlDensity.value);
+  const layout = buildPatternLayout(width, height, gridN, patLayoutMode);
+
+  rng.s = 0xcafebabe ^ (gridN * 0x9e3779b9 | 0);
+  ctx.fillStyle = '#000000';
+  for (const placement of layout.placements) {
+    const { row, col } = placement;
+    const v = getVariant(row, col);
+    if (!v) continue;
+
+    const geo = ensurePatternVariantGeometry(v, highQuality);
+    if (!geo) continue;
+    const layoutTightness =
+      patLayoutMode === 'triangle' ? 0.43 :
+      patLayoutMode === 'offset'   ? 0.44 :
+      patLayoutMode === 'brick'    ? 0.41 :
+      patLayoutMode === 'diamond'  ? 0.40 :
+                                      0.46;
+    const unitScale = (layout.unit * layoutTightness) / geo.naturalR;
+    const tx = placement.x;
+    const ty = placement.y;
+    const angle = placement.angle || 0;
+
+    fillPolygonOnCtx(ctx, geo.corePts, tx, ty, unitScale, angle);
+    for (const shape of geo.stamenShapes) {
+      fillPolygonOnCtx(ctx, shape.bridge, tx, ty, unitScale, angle);
+      fillPolygonOnCtx(ctx, shape.poly, tx, ty, unitScale, angle);
+    }
+  }
+}
+
+function exportPatternSVG() {
+  const canvas = document.querySelector('#pat-canvas-host canvas');
+  if (!canvas || patPool.length === 0 || !sharedBuildCorePolygon || !sharedBuildStamenShapes) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const parts = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    `<rect width="${width}" height="${height}" fill="#ffffff"/>`
+  ];
+
+  const gridN = parseInt(patSlDensity.value);
+  const layout = buildPatternLayout(width, height, gridN, patLayoutMode);
+
+  rng.s = 0xcafebabe ^ (gridN * 0x9e3779b9 | 0);
+  for (const placement of layout.placements) {
+    const { row, col } = placement;
+    const v = getVariant(row, col);
+    if (!v) continue;
+
+    const geo = ensurePatternVariantGeometry(v, true);
+    if (!geo) continue;
+    const layoutTightness =
+      patLayoutMode === 'triangle' ? 0.43 :
+      patLayoutMode === 'offset'   ? 0.44 :
+      patLayoutMode === 'brick'    ? 0.41 :
+      patLayoutMode === 'diamond'  ? 0.40 :
+                                      0.46;
+    const unitScale = (layout.unit * layoutTightness) / geo.naturalR;
+    const tx = placement.x;
+    const ty = placement.y;
+    const angle = placement.angle || 0;
+
+    if (geo.corePts) parts.push(`<path d="${polygonToSvgPath(geo.corePts, tx, ty, unitScale, angle)}" fill="#000000"/>`);
+    for (const shape of geo.stamenShapes) {
+      parts.push(`<path d="${polygonToSvgPath(shape.bridge, tx, ty, unitScale, angle)}" fill="#000000"/>`);
+      parts.push(`<path d="${polygonToSvgPath(shape.poly,   tx, ty, unitScale, angle)}" fill="#000000"/>`);
+    }
+  }
+
+  parts.push(`</svg>`);
+
+  const blob = new Blob([parts.join('')], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.download = 'pattern.svg';
+  a.href = url;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function initPatternSketch() {
+  patternP5 = new p5(function(p2) {
+    p2.setup = function() {
+      p2.pixelDensity(1);
+      p2.createCanvas(460, 460).parent('pat-canvas-host');
+      p2.noLoop();
+      requestPatternRedraw();
+    };
+
+    p2.draw = function() {
+      const ctx = p2.drawingContext;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, p2.width, p2.height);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, p2.width, p2.height);
+      if (patSceneCacheDirty) rebuildPatternSceneCache();
+      if (patSceneCacheCanvas) ctx.drawImage(patSceneCacheCanvas, 0, 0, p2.width, p2.height);
+    };
+  });
+}
+
+// ── 放大镜功能 ───────────────────────────────────────────────────
+let magActive = false;
+const MAG_ZOOM = 3.3;      // 放大倍数
+const MAG_R    = 80;       // 镜头半径（px）
+let patMagRAF = 0;
+let patMagLastClientX = 0;
+let patMagLastClientY = 0;
+let patMagHasPoint = false;
+let patMagCacheCanvas = null;
+let patMagCacheScale = 2.4;
+let patMagCacheDirty = true;
+let patMagCacheTimer = 0;
+
+function rebuildPatternMagnifierCache() {
+  const patCanvas = document.querySelector('#pat-canvas-host canvas');
+  if (!patCanvas) return;
+  if (!patMagCacheCanvas) patMagCacheCanvas = document.createElement('canvas');
+
+  const cacheW = Math.max(1, Math.round(patCanvas.width * patMagCacheScale));
+  const cacheH = Math.max(1, Math.round(patCanvas.height * patMagCacheScale));
+  if (patMagCacheCanvas.width !== cacheW || patMagCacheCanvas.height !== cacheH) {
+    patMagCacheCanvas.width = cacheW;
+    patMagCacheCanvas.height = cacheH;
+  }
+
+  const ctx = patMagCacheCanvas.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cacheW, cacheH);
+  ctx.save();
+  ctx.scale(patMagCacheScale, patMagCacheScale);
+  renderPatternVectorScene(ctx, patCanvas.width, patCanvas.height, true, true);
+  ctx.restore();
+  patMagCacheDirty = false;
+}
+
+function renderPatternMagnifier(clientX, clientY) {
+  const patCanvas = document.querySelector('#pat-canvas-host canvas');
+  if (!patCanvas) return;
+  if (!patMagCacheCanvas) rebuildPatternMagnifierCache();
+  if (!patMagCacheCanvas) return;
+
+  const lens = document.getElementById('pat-magnifier');
+  const wrap = document.getElementById('pat-canvas-wrap');
+  const wrapRect = wrap.getBoundingClientRect();
+  const canvasRect = patCanvas.getBoundingClientRect();
+
+  const lensX = clientX - wrapRect.left - MAG_R;
+  const lensY = clientY - wrapRect.top - MAG_R;
+  lens.style.left = lensX + 'px';
+  lens.style.top = lensY + 'px';
+  lens.style.display = 'block';
+
+  const srcX = clamp(
+    (clientX - canvasRect.left) * (patCanvas.width / canvasRect.width),
+    0,
+    patCanvas.width
+  );
+  const srcY = clamp(
+    (clientY - canvasRect.top) * (patCanvas.height / canvasRect.height),
+    0,
+    patCanvas.height
+  );
+
+  const magCanvas = document.getElementById('pat-mag-canvas');
+  const ctx = magCanvas.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, MAG_R * 2, MAG_R * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, MAG_R * 2, MAG_R * 2);
+  const srcSize = ((MAG_R * 2) / MAG_ZOOM) * patMagCacheScale;
+  const cacheX = srcX * patMagCacheScale;
+  const cacheY = srcY * patMagCacheScale;
+  const maxSrcLeft = Math.max(0, patMagCacheCanvas.width - srcSize);
+  const maxSrcTop = Math.max(0, patMagCacheCanvas.height - srcSize);
+  const srcLeft = clamp(cacheX - srcSize / 2, 0, maxSrcLeft);
+  const srcTop = clamp(cacheY - srcSize / 2, 0, maxSrcTop);
+  ctx.drawImage(
+    patMagCacheCanvas,
+    srcLeft, srcTop, srcSize, srcSize,
+    0, 0, MAG_R * 2, MAG_R * 2
+  );
+}
+
+function schedulePatternMagnifier(clientX, clientY) {
+  patMagLastClientX = clientX;
+  patMagLastClientY = clientY;
+  patMagHasPoint = true;
+  if (patMagRAF) return;
+  patMagRAF = requestAnimationFrame(() => {
+    patMagRAF = 0;
+    if (!magActive || !patMagHasPoint) return;
+    renderPatternMagnifier(patMagLastClientX, patMagLastClientY);
+  });
+}
+
+function toggleMagnifier() {
+  magActive = !magActive;
+  const btn = document.getElementById('patMagBtn');
+  const lens = document.getElementById('pat-magnifier');
+  btn.classList.toggle('active', magActive);
+  if (!magActive) {
+    lens.style.display = 'none';
+    patMagHasPoint = false;
+    if (patMagCacheTimer) {
+      clearTimeout(patMagCacheTimer);
+      patMagCacheTimer = 0;
+    }
+  } else {
+    queuePatternCacheRefresh(true);
+  }
+}
+
+// 鼠标在画布包裹层上移动时更新镜头
+document.getElementById('pat-canvas-wrap').addEventListener('mousemove', function(e) {
+  if (!magActive) return;
+  schedulePatternMagnifier(e.clientX, e.clientY);
+});
+
+document.getElementById('pat-canvas-wrap').addEventListener('mouseleave', function() {
+  if (!magActive) return;
+  document.getElementById('pat-magnifier').style.display = 'none';
+  patMagHasPoint = false;
+});
+
+window.addEventListener('resize', () => {
+  if (document.getElementById('pattern-screen').classList.contains('panel-hidden')) return;
+  requestPatternRedraw();
+});
+
 </script>
 </body>
 </html>
