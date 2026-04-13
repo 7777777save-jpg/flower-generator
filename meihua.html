@@ -115,7 +115,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
-    #btnAnim, #btnExport, #btnRandom, #btnTest, #btnPattern {
+    #btnAnim, #btnExport, #btnRandom, #btnTest, #btnPattern, #btnTrace {
       padding: 9px 0;
       border: none; border-radius: 6px;
       font-size: 12px; letter-spacing: .06em;
@@ -127,10 +127,10 @@
     #btnAnim:hover, #btnExport:hover, #btnRandom:hover {
       background: #ddd;
     }
-    #btnTest, #btnPattern {
+    #btnTest, #btnPattern, #btnTrace {
       background: #1a1a1a; color: #fff;
     }
-    #btnTest:hover, #btnPattern:hover {
+    #btnTest:hover, #btnPattern:hover, #btnTrace:hover {
       background: #444;
     }
     #info {
@@ -230,6 +230,101 @@
     }
     .q-progress span {
       color: #3a5fc8; font-weight: 600;
+    }
+
+    /* ── 回溯人格面板 ─────────────────────────────────────────── */
+    #traceback-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    #traceback {
+      width: 460px;
+      min-height: 520px;
+      max-height: calc(100vh - 48px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.10);
+    }
+    .tb-header {
+      padding: 16px 20px 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .tb-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #888;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .tb-subtitle {
+      font-size: 10px;
+      color: #bbb;
+      margin-top: 3px;
+      letter-spacing: .03em;
+      line-height: 1.5;
+    }
+    .tb-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 0;
+    }
+    .tb-summary {
+      padding: 0 20px 12px;
+      border-bottom: 1px solid #f2f2f2;
+    }
+    .tb-summary-text {
+      font-size: 12px;
+      color: #555;
+      line-height: 1.7;
+    }
+    .tb-item {
+      padding: 10px 20px;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .tb-item:last-child {
+      border-bottom: none;
+    }
+    .tb-label {
+      font-size: 10px;
+      color: #bbb;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .tb-choice {
+      font-size: 12px;
+      color: #222;
+      line-height: 1.55;
+    }
+    .tb-score {
+      margin-top: 4px;
+      font-size: 10px;
+      color: #999;
+      letter-spacing: .04em;
+    }
+    .tb-footer {
+      padding: 14px 20px;
+      border-top: 1px solid #eee;
+    }
+    #btnTraceClose {
+      width: 100%;
+      padding: 10px 0;
+      border: none;
+      border-radius: 6px;
+      background: #1a1a1a;
+      color: #fff;
+      font-size: 12px;
+      letter-spacing: .08em;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    #btnTraceClose:hover {
+      background: #444;
     }
 
     /* ── 图案化界面 ─────────────────────────────────────────────── */
@@ -625,6 +720,7 @@
       <button id="btnRandom" onclick="randomize()">⚄ 随机</button>
       <button id="btnTest" onclick="openQuestionnaire()">测试</button>
       <button id="btnExport" onclick="exportPNG()">导出 PNG</button>
+      <button id="btnTrace" onclick="openTraceback()" style="grid-column:1/-1;">回溯人格</button>
       <button id="btnPattern" onclick="openPattern()" style="grid-column:1/-1;">图案化</button>
     </div>
 
@@ -712,6 +808,24 @@
   </div><!-- #questionnaire -->
 </div><!-- #questionnaire-screen -->
 
+<div id="traceback-screen" class="panel-hidden">
+  <div id="traceback">
+    <div class="tb-header">
+      <div class="tb-title">回溯人格</div>
+      <div class="tb-subtitle">基于当前图形与既有映射模型做逆向推理。<br>这不是唯一正确答案，而是按模型回推得到的最接近描述。</div>
+    </div>
+    <div class="tb-body">
+      <div class="tb-summary">
+        <div class="tb-summary-text" id="tbSummary"></div>
+      </div>
+      <div id="tbList"></div>
+    </div>
+    <div class="tb-footer">
+      <button id="btnTraceClose" onclick="closeTraceback()">返回</button>
+    </div>
+  </div>
+</div><!-- #traceback-screen -->
+
 <script>
 // 随机化所有参数
 function randomize() {
@@ -753,6 +867,7 @@ function exportPNG() {
 let animPlaying = false;
 const mainScreen = document.getElementById('zoom-wrap');
 const questionnaireScreen = document.getElementById('questionnaire-screen');
+const tracebackScreen = document.getElementById('traceback-screen');
 const bgm = document.getElementById('bgm');
 
 function syncAnimButton() {
@@ -803,6 +918,17 @@ function openQuestionnaire() {
 
 function closeQuestionnaire() {
   questionnaireScreen.classList.add('panel-hidden');
+  mainScreen.classList.remove('panel-hidden');
+}
+
+function openTraceback() {
+  renderTraceback();
+  mainScreen.classList.add('panel-hidden');
+  tracebackScreen.classList.remove('panel-hidden');
+}
+
+function closeTraceback() {
+  tracebackScreen.classList.add('panel-hidden');
   mainScreen.classList.remove('panel-hidden');
 }
 
@@ -918,6 +1044,120 @@ function renderQuestions() {
 }
 renderQuestions();
 
+const TRACEBACK_SET = QUESTION_SETS[0];
+const TRACEBACK_MAPPING = MAPPINGS[0];
+
+function currentShapeParams() {
+  return {
+    easeRatio: clamp((sliderUiToActual(slEase) - eMin) / Math.max(0.000001, eMax - eMin), 0, 1),
+    size: sliderUiToActual(slSize),
+    axis: sliderUiToActual(slAxis),
+    count: sliderUiToActual(slCount),
+    spread: sliderUiToActual(slSpread),
+    length: sliderUiToActual(slLength),
+    thick: sliderUiToActual(slThick),
+    taper: sliderUiToActual(slTaper),
+    rhythm: sliderUiToActual(slRhythm),
+    perturb: sliderUiToActual(slPerturb),
+    structW: sliderUiToActual(slStructW),
+    bendW: sliderUiToActual(slBendW),
+    boundW: sliderUiToActual(slBoundW),
+    smoothW: sliderUiToActual(slSmoothW),
+  };
+}
+
+function tracebackParamRange(key) {
+  const ranges = {
+    easeRatio: [0, 1],
+    size: [0, 1],
+    axis: [0, 1],
+    count: [0, 40],
+    spread: [-1, 1],
+    length: [0, 1],
+    thick: [0, 1],
+    taper: [-2, 2],
+    rhythm: [0, 1],
+    perturb: [0, 1],
+    structW: [0, 1],
+    bendW: [0, 1],
+    boundW: [0, 1],
+    smoothW: [0, 1],
+  };
+  return ranges[key] || [0, 1];
+}
+
+function scoreTracebackOption(params, spec) {
+  const keys = Object.keys(spec);
+  if (!keys.length) return 0;
+  let sum = 0;
+  for (const key of keys) {
+    const range = tracebackParamRange(key);
+    const span = Math.max(0.000001, range[1] - range[0]);
+    const diff = Math.abs((params[key] ?? 0) - spec[key]) / span;
+    const similarity = Math.max(0, 1 - diff);
+    sum += similarity;
+  }
+  return sum / keys.length;
+}
+
+function formatTracebackPercent(score) {
+  return Math.round(score * 100);
+}
+
+function buildTracebackSummary(results) {
+  const picks = results.map(item => item.choiceText);
+  const confidenceAvg = results.reduce((acc, item) => acc + item.score, 0) / Math.max(1, results.length);
+  const confidenceText =
+    confidenceAvg > 0.84 ? '当前图形和模型的贴合度很高，' :
+    confidenceAvg > 0.68 ? '当前图形和模型有比较明确的对应关系，' :
+                           '当前图形和模型之间是较宽松的对应关系，';
+
+  return confidenceText +
+    '按这套回溯模型，你更接近一个“' +
+    picks.join('、') +
+    '”的人。整体上会给人一种' +
+    picks[0] + '、' + picks[1] + '、' + picks[3] +
+    '的感觉，同时在' + picks[2] + '与' + picks[5] +
+    '上表现得比较明显。';
+}
+
+function renderTraceback() {
+  const params = currentShapeParams();
+  const results = [];
+
+  for (let i = 0; i < TRACEBACK_SET.length; i++) {
+    const q = TRACEBACK_SET[i];
+    const mapping = TRACEBACK_MAPPING[i];
+    const scored = ['A', 'B', 'C'].map((key, idx) => ({
+      key,
+      idx,
+      text: q.opts[idx],
+      score: scoreTracebackOption(params, mapping[key])
+    })).sort((a, b) => b.score - a.score);
+
+    const best = scored[0];
+    const second = scored[1];
+    results.push({
+      label: q.label,
+      question: q.text,
+      choiceKey: best.key,
+      choiceText: best.text,
+      score: best.score,
+      secondaryText: second.text,
+      secondaryScore: second.score
+    });
+  }
+
+  document.getElementById('tbSummary').textContent = buildTracebackSummary(results);
+  document.getElementById('tbList').innerHTML = results.map(item => `
+    <div class="tb-item">
+      <div class="tb-label">${item.label}</div>
+      <div class="tb-choice">${item.question}<br>更接近：${item.choiceKey} · ${item.choiceText}</div>
+      <div class="tb-score">匹配度 ${formatTracebackPercent(item.score)}%　次接近：${item.secondaryText}（${formatTracebackPercent(item.secondaryScore)}%）</div>
+    </div>
+  `).join('');
+}
+
 function selectOpt(el) {
   ensureAudio();
   const q = el.dataset.q;
@@ -1023,31 +1263,52 @@ function evalNoise(harmonics, θ) {
   return norm > 0 ? noise / norm : 0;
 }
 
-// ── 滑块绑定 ──────────────────────────────────────────────────
-function bindSlider(id, displayId, initMin, initMax, initVal) {
+// ── 滑块绑定：UI 统一为 0-100，内部映射回真实参数范围 ─────────────────
+function sliderActualToUi(actual, actualMin, actualMax) {
+  const t = (actual - actualMin) / Math.max(0.000001, actualMax - actualMin);
+  return Math.round(clamp(t, 0, 1) * 100);
+}
+
+function sliderUiToActual(sl) {
+  const ui = parseFloat(sl.value);
+  const actualMin = parseFloat(sl.dataset.actualMin);
+  const actualMax = parseFloat(sl.dataset.actualMax);
+  const t = clamp(ui / 100, 0, 1);
+  let actual = actualMin + (actualMax - actualMin) * t;
+  if (sl.dataset.actualRound === 'int') actual = Math.round(actual);
+  return actual;
+}
+
+function bindSlider(id, displayId, actualMin = 0, actualMax = 1, actualVal = actualMin, actualRound = false) {
   const sl  = document.getElementById(id);
   const dsp = document.getElementById(displayId);
-  if (initMin !== undefined) { sl.min = initMin; sl.max = initMax; sl.value = initVal; }
+  sl.min = 0;
+  sl.max = 100;
+  sl.step = 1;
+  sl.dataset.actualMin = actualMin;
+  sl.dataset.actualMax = actualMax;
+  sl.dataset.actualRound = actualRound ? 'int' : '';
+  sl.value = String(sliderActualToUi(actualVal, actualMin, actualMax));
   function update() {
     const pct = ((sl.value - sl.min) / (sl.max - sl.min) * 100).toFixed(1);
     sl.style.setProperty('--pct', pct + '%');
-    dsp.textContent = parseFloat(sl.value).toFixed(2);
+    dsp.textContent = String(Math.round(parseFloat(sl.value)));
   }
   update();
   sl.addEventListener('input', () => { update(); if (window._redraw) window._redraw(); });
   return sl;
 }
 
-const slEase    = bindSlider('slEase',    'valEase',    eMin.toFixed(4), eMax.toFixed(4), (eCrit+0.02).toFixed(4));
-const slSize    = bindSlider('slSize',    'valSize');
-const slAxis    = bindSlider('slAxis',    'valAxis');
-const slCount   = bindSlider('slCount',   'valCount');
-const slSpread  = bindSlider('slSpread',  'valSpread');
-const slLength  = bindSlider('slLength',  'valLength');
-const slThick   = bindSlider('slThick',   'valThick');
-const slTaper   = bindSlider('slTaper',   'valTaper');
-const slRhythm  = bindSlider('slRhythm',  'valRhythm');
-const slPerturb = bindSlider('slPerturb', 'valPerturb');
+const slEase    = bindSlider('slEase',    'valEase',    eMin, eMax, eCrit + 0.02);
+const slSize    = bindSlider('slSize',    'valSize',    0, 1, 0.35);
+const slAxis    = bindSlider('slAxis',    'valAxis',    0, 1, 0);
+const slCount   = bindSlider('slCount',   'valCount',   0, 40, 8, true);
+const slSpread  = bindSlider('slSpread',  'valSpread',  -1, 1, 0);
+const slLength  = bindSlider('slLength',  'valLength',  0, 1, 0.5);
+const slThick   = bindSlider('slThick',   'valThick',   0, 1, 0.3);
+const slTaper   = bindSlider('slTaper',   'valTaper',   -2, 2, 0);
+const slRhythm  = bindSlider('slRhythm',  'valRhythm',  0, 1, 0);
+const slPerturb = bindSlider('slPerturb', 'valPerturb', 0, 1, 0);
 const slStructW = bindSlider('slStructW', 'valStructW', 0, 1, 0.6);
 const slBendW   = bindSlider('slBendW',   'valBendW',   0, 1, 0.2);
 const slBoundW  = bindSlider('slBoundW',  'valBoundW',  0, 1, 0.2);
@@ -1108,11 +1369,11 @@ let sharedBuildStamenShapes = null;
 // ── p5 ───────────────────────────────────────────────────────
 // 计算三层实际强度（归一化权重 × perturb）
 function getPerturbAmounts() {
-  const perturb = parseFloat(slPerturb.value);
-  const sW  = parseFloat(slStructW.value);
-  const beW = parseFloat(slBendW.value);
-  const boW = parseFloat(slBoundW.value);
-  const smW = parseFloat(slSmoothW.value);
+  const perturb = sliderUiToActual(slPerturb);
+  const sW  = sliderUiToActual(slStructW);
+  const beW = sliderUiToActual(slBendW);
+  const boW = sliderUiToActual(slBoundW);
+  const smW = sliderUiToActual(slSmoothW);
   const total = sW + beW + boW;
   const smoothAmt = smW;   // 圆润独立于扰动，直接使用滑块值
   if (total < 0.001) return { structAmt: 0, bendAmt: 0, boundAmt: 0, smoothAmt };
@@ -1520,11 +1781,14 @@ let mainP5 = new p5(function(p) {
 
   // 工具：把值写入滑块并触发更新显示
   function setSlider(sl, valId, v) {
-    const clamped = Math.max(parseFloat(sl.min), Math.min(parseFloat(sl.max), v));
-    sl.value = clamped;
-    const pct = ((clamped - parseFloat(sl.min)) / (parseFloat(sl.max) - parseFloat(sl.min)) * 100).toFixed(1);
+    const actualMin = parseFloat(sl.dataset.actualMin);
+    const actualMax = parseFloat(sl.dataset.actualMax);
+    const clampedActual = Math.max(actualMin, Math.min(actualMax, v));
+    const uiValue = sliderActualToUi(clampedActual, actualMin, actualMax);
+    sl.value = String(uiValue);
+    const pct = ((uiValue - parseFloat(sl.min)) / (parseFloat(sl.max) - parseFloat(sl.min)) * 100).toFixed(1);
     sl.style.setProperty('--pct', pct + '%');
-    document.getElementById(valId).textContent = parseFloat(clamped).toFixed(2);
+    document.getElementById(valId).textContent = String(uiValue);
   }
   window._setSlider = setSlider;
 
@@ -1628,10 +1892,10 @@ let mainP5 = new p5(function(p) {
     }
 
     p.background(255);
-    const ease = parseFloat(slEase.value);
-    const sizeFac = parseFloat(slSize.value);
-    const axis = parseFloat(slAxis.value);
-    const count = parseInt(slCount.value);
+    const ease = sliderUiToActual(slEase);
+    const sizeFac = sliderUiToActual(slSize);
+    const axis = sliderUiToActual(slAxis);
+    const count = sliderUiToActual(slCount);
     const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
     const field = buildCoreField(ease, sizeFac, axis, structAmt, boundAmt, smoothAmt, count);
 
@@ -1639,8 +1903,8 @@ let mainP5 = new p5(function(p) {
     drawCore(p, p.width/2, p.height/2, field, smoothAmt, 255);
     drawStamens(p, p.width/2, p.height/2, field, sizeFac, smoothAmt, bendAmt, boundAmt, 255,
       count,
-      parseFloat(slLength.value), parseFloat(slThick.value),
-      parseFloat(slTaper.value), parseFloat(slRhythm.value), parseFloat(slSpread.value)
+      sliderUiToActual(slLength), sliderUiToActual(slThick),
+      sliderUiToActual(slTaper), sliderUiToActual(slRhythm), sliderUiToActual(slSpread)
     );
   };
 });
@@ -1810,18 +2074,18 @@ function ensurePatternVariantGeometry(variant, highQuality = false) {
 function generatePatPool(onDone = null, sessionId = patOpenSession) {
   // 从第一阶段烘焙基础参数
   const base = {
-    axis:    parseFloat(slAxis.value),
-    count:   parseInt(slCount.value),
-    lenFac:  parseFloat(slLength.value),
-    thickFac:parseFloat(slThick.value),
-    taper:   parseFloat(slTaper.value),
-    rhythm:  parseFloat(slRhythm.value),
-    spread:  parseFloat(slSpread.value),
-    perturb: parseFloat(slPerturb.value),
-    structW: parseFloat(slStructW.value),
-    bendW:   parseFloat(slBendW.value),
-    boundW:  parseFloat(slBoundW.value),
-    smoothW: parseFloat(slSmoothW.value),
+    axis:    sliderUiToActual(slAxis),
+    count:   sliderUiToActual(slCount),
+    lenFac:  sliderUiToActual(slLength),
+    thickFac:sliderUiToActual(slThick),
+    taper:   sliderUiToActual(slTaper),
+    rhythm:  sliderUiToActual(slRhythm),
+    spread:  sliderUiToActual(slSpread),
+    perturb: sliderUiToActual(slPerturb),
+    structW: sliderUiToActual(slStructW),
+    bendW:   sliderUiToActual(slBendW),
+    boundW:  sliderUiToActual(slBoundW),
+    smoothW: sliderUiToActual(slSmoothW),
   };
 
   rng.s = 0xdeadbeef ^ (base.count * 0x9e3779b9 | 0);
@@ -1993,8 +2257,8 @@ function openPattern() {
   if (mainCanvas) document.getElementById('patRefImg').src = mainCanvas.toDataURL();
 
   // 烘焙外形参数
-  patBakedEase = parseFloat(slEase.value);
-  patBakedSize = parseFloat(slSize.value);
+  patBakedEase = sliderUiToActual(slEase);
+  patBakedSize = sliderUiToActual(slSize);
 
   // 显示图案屏，隐藏主卡片
   document.getElementById('card').classList.add('panel-hidden');
