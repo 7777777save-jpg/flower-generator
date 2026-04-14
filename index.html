@@ -164,9 +164,68 @@
       font-size: 10px; color: #bbb;
       margin-top: 3px; letter-spacing: .03em;
     }
+    .q-mode-switch {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .q-mode-btn {
+      border: 1px solid #e6e6e6;
+      border-radius: 999px;
+      background: #fafafa;
+      color: #888;
+      font-size: 11px;
+      letter-spacing: .05em;
+      padding: 8px 0;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .q-mode-btn:hover {
+      border-color: #cfd6e8;
+      background: #f4f7ff;
+      color: #5670b8;
+    }
+    .q-mode-btn.active {
+      border-color: #1a1a1a;
+      background: #1a1a1a;
+      color: #fff;
+    }
     .q-body {
       flex: 1; overflow-y: auto;
       padding: 8px 0;
+    }
+    .q-mbti-panel {
+      padding: 16px 20px 20px;
+    }
+    .q-mbti-label {
+      font-size: 10px;
+      color: #bbb;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .q-mbti-input {
+      width: 100%;
+      border: 1.5px solid #e5e5e5;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 20px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: #222;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .q-mbti-input:focus {
+      border-color: #3a5fc8;
+      box-shadow: 0 0 0 3px rgba(58,95,200,.10);
+    }
+    .q-mbti-help {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #888;
+      line-height: 1.6;
     }
     .q-item {
       padding: 10px 20px;
@@ -723,6 +782,7 @@
       <button id="btnTrace" onclick="openTraceback()" style="grid-column:1/-1;">回溯人格</button>
       <button id="btnPattern" onclick="openPattern()" style="grid-column:1/-1;">图案化</button>
     </div>
+    <div id="info">导出会自动生成 5cm × 5cm PNG，并发送到自动打印程序。</div>
 
   </div><!-- #controls -->
 
@@ -798,12 +858,51 @@
   <div id="questionnaire">
     <div class="q-header">
       <div class="q-title">人格生成</div>
-      <div class="q-subtitle">回答 6 个问题，生成专属形态</div>
+      <div class="q-subtitle" id="qSubtitle">回答 6 个问题，生成专属形态</div>
+      <div class="q-mode-switch">
+        <button type="button" class="q-mode-btn active" id="qModeQuizBtn" onclick="setPersonalityMode('quiz')">问卷答题</button>
+        <button type="button" class="q-mode-btn" id="qModeMbtiBtn" onclick="setPersonalityMode('mbti')">输入 MBTI</button>
+        <button type="button" class="q-mode-btn" id="qModeSbtiBtn" onclick="setPersonalityMode('sbti')">输入 SBTI</button>
+      </div>
     </div>
-    <div class="q-body" id="q-body"></div>
+    <div class="q-body">
+      <div id="q-quiz-panel"></div>
+      <div class="q-mbti-panel panel-hidden" id="q-mbti-panel">
+        <div class="q-mbti-label">输入你的 MBTI</div>
+        <input
+          id="mbtiInput"
+          class="q-mbti-input"
+          type="text"
+          maxlength="4"
+          inputmode="latin"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          placeholder="例如 INFJ"
+          oninput="handleMbtiInput(this.value)"
+        >
+        <div class="q-mbti-help" id="mbtiHelp">支持 16 型 MBTI，例如 INFJ、ENTP、ISFP。</div>
+      </div>
+      <div class="q-mbti-panel panel-hidden" id="q-sbti-panel">
+        <div class="q-mbti-label">输入你的 SBTI</div>
+        <input
+          id="sbtiInput"
+          class="q-mbti-input"
+          type="text"
+          maxlength="8"
+          inputmode="latin"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          placeholder="例如 CTRL / DRUNK"
+          oninput="handleSbtiInput(this.value)"
+        >
+        <div class="q-mbti-help" id="sbtiHelp">支持 27 型 SBTI，例如 CTRL、BOSS、DRUNK、OJBK、LOVE-R。</div>
+      </div>
+    </div>
     <div class="q-footer">
       <button id="btnSubmit" onclick="submitPersonality()" disabled>提交</button>
-      <div class="q-progress">已回答 <span id="qCount">0</span> / 6 题</div>
+      <div class="q-progress" id="qProgress">已回答 <span id="qCount">0</span> / 6 题</div>
     </div>
   </div><!-- #questionnaire -->
 </div><!-- #questionnaire-screen -->
@@ -854,13 +953,185 @@ function randomize() {
 }
 
 // 导出 PNG
-function exportPNG() {
-  const canvas = document.querySelector('#sketch-host canvas');
+const AUTO_PRINT_SERVICE_URL =
+  window.location.protocol === 'file:' ? 'http://127.0.0.1:3210' : window.location.origin;
+const EXPORT_SIZE_MM = 50;
+const EXPORT_DPI = 203;
+const EXPORT_SIZE_PX = Math.round((EXPORT_SIZE_MM / 25.4) * EXPORT_DPI);
+const EXPORT_PADDING_RATIO = 0.04;
+const PRINT_BLEED_SCALE = 1.06;
+
+function setExportStatus(message, isError = false) {
+  const info = document.getElementById('info');
+  if (!info) return;
+  info.textContent = message;
+  info.style.color = isError ? '#c95f5f' : '#ccc';
+}
+
+function downloadPNG(dataUrl) {
   const a = document.createElement('a');
-  a.download = 'meihua.png';
-  a.href = canvas.toDataURL('image/png');
+  a.download = 'meihua-50mm.png';
+  a.href = dataUrl;
   a.click();
-  startPlayback();
+}
+
+function findArtworkBounds(sourceCanvas) {
+  const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+  const { width, height } = sourceCanvas;
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const alpha = pixels[index + 3];
+      const r = pixels[index];
+      const g = pixels[index + 1];
+      const b = pixels[index + 2];
+      const isArtworkPixel = alpha > 10 && (r < 245 || g < 245 || b < 245);
+
+      if (!isArtworkPixel) continue;
+
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return { x: 0, y: 0, width, height };
+  }
+
+  const contentWidth = maxX - minX + 1;
+  const contentHeight = maxY - minY + 1;
+  const padding = Math.max(
+    2,
+    Math.round(Math.max(contentWidth, contentHeight) * EXPORT_PADDING_RATIO)
+  );
+
+  return {
+    x: Math.max(0, minX - padding),
+    y: Math.max(0, minY - padding),
+    width: Math.min(width, maxX + padding + 1) - Math.max(0, minX - padding),
+    height: Math.min(height, maxY + padding + 1) - Math.max(0, minY - padding),
+  };
+}
+
+function buildExportCanvas(sourceCanvas) {
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = EXPORT_SIZE_PX;
+  exportCanvas.height = EXPORT_SIZE_PX;
+
+  const ctx = exportCanvas.getContext('2d');
+  const bounds = findArtworkBounds(sourceCanvas);
+  const scale = Math.min(EXPORT_SIZE_PX / bounds.width, EXPORT_SIZE_PX / bounds.height);
+  const drawWidth = bounds.width * scale;
+  const drawHeight = bounds.height * scale;
+  const offsetX = (EXPORT_SIZE_PX - drawWidth) / 2;
+  const offsetY = (EXPORT_SIZE_PX - drawHeight) / 2;
+
+  ctx.clearRect(0, 0, EXPORT_SIZE_PX, EXPORT_SIZE_PX);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(
+    sourceCanvas,
+    bounds.x,
+    bounds.y,
+    bounds.width,
+    bounds.height,
+    offsetX,
+    offsetY,
+    drawWidth,
+    drawHeight
+  );
+
+  return exportCanvas;
+}
+
+function buildPrinterDataUrl(sourceCanvas) {
+  const printerCanvas = document.createElement('canvas');
+  printerCanvas.width = EXPORT_SIZE_PX;
+  printerCanvas.height = EXPORT_SIZE_PX;
+
+  const ctx = printerCanvas.getContext('2d');
+  const drawWidth = EXPORT_SIZE_PX * PRINT_BLEED_SCALE;
+  const drawHeight = EXPORT_SIZE_PX * PRINT_BLEED_SCALE;
+  const offsetX = (printerCanvas.width - drawWidth) / 2;
+  const offsetY = (printerCanvas.height - drawHeight) / 2;
+
+  ctx.clearRect(0, 0, printerCanvas.width, printerCanvas.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(sourceCanvas, offsetX, offsetY, drawWidth, drawHeight);
+
+  return printerCanvas.toDataURL('image/png');
+}
+
+async function sendPNGToAutoPrinter(imageDataUrl) {
+  let response;
+
+  try {
+    response = await fetch(`${AUTO_PRINT_SERVICE_URL}/api/print`, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ imageDataUrl })
+    });
+  } catch (error) {
+    throw new Error('无法连接自动打印程序，请先双击“自动打印程序/start.command”并从它打开主页面。');
+  }
+
+  let result = {};
+
+  try {
+    result = await response.json();
+  } catch (error) {
+    result = {};
+  }
+
+  if (!response.ok || !result.ok) {
+    throw new Error(result.message || '自动打印程序返回失败。');
+  }
+
+  return result;
+}
+
+async function exportPNG() {
+  const canvas = document.querySelector('#sketch-host canvas');
+  const exportButton = document.getElementById('btnExport');
+
+  if (!canvas || !exportButton) return;
+
+  const originalLabel = exportButton.textContent;
+  exportButton.disabled = true;
+  exportButton.textContent = '处理中...';
+  setExportStatus(`正在生成 ${EXPORT_SIZE_MM}mm × ${EXPORT_SIZE_MM}mm PNG，并发送到自动打印程序...`);
+
+  try {
+    const exportCanvas = buildExportCanvas(canvas);
+    const imageDataUrl = exportCanvas.toDataURL('image/png');
+    const printerDataUrl = buildPrinterDataUrl(exportCanvas);
+    downloadPNG(imageDataUrl);
+
+    exportButton.textContent = '发送打印中...';
+    setExportStatus('5cm × 5cm PNG 已导出，正在交给打印程序自动居中并按 5cm 输出...');
+
+    const result = await sendPNGToAutoPrinter(printerDataUrl);
+    setExportStatus(`已导出并发送到 ${result.printer}，打印程序正在按 5cm × 5cm 自动打印。`);
+  } catch (error) {
+    console.error(error);
+    setExportStatus(`PNG 已导出，但自动打印失败：${error.message}`, true);
+  } finally {
+    exportButton.disabled = false;
+    exportButton.textContent = originalLabel;
+    startPlayback();
+  }
 }
 
 // 动画控制
@@ -1025,10 +1296,195 @@ const MAPPINGS = [
 // 当前题库索引（每次重置时随机选）
 let currentSetIdx = Math.floor(Math.random() * 3);
 const qAnswers = {};
+let personalityMode = 'quiz';
+
+const MBTI_BASE_PARAMS = {
+  easeRatio: 0.52,
+  size: 0.42,
+  axis: 0.5,
+  count: 11,
+  spread: 0,
+  length: 0.62,
+  thick: 0.42,
+  taper: 0,
+  rhythm: 0.5,
+  perturb: 0.34,
+  structW: 0.48,
+  bendW: 0.34,
+  boundW: 0.22,
+  smoothW: 0.46,
+};
+
+const MBTI_LETTER_EFFECTS = {
+  I: { axis: -0.18, spread: -0.12, smoothW: 0.16, boundW: 0.08, size: 0.05, count: -1 },
+  E: { axis: 0.18, spread: 0.14, smoothW: -0.10, boundW: -0.05, size: -0.04, count: 2 },
+  N: { perturb: 0.20, bendW: 0.14, rhythm: 0.10, length: 0.10, structW: -0.08, count: 2 },
+  S: { perturb: -0.12, bendW: -0.06, rhythm: -0.06, length: -0.05, structW: 0.14, count: -1 },
+  F: { thick: 0.12, smoothW: 0.14, taper: 0.45, size: 0.06, boundW: 0.05 },
+  T: { thick: -0.08, smoothW: -0.12, taper: -0.45, structW: 0.12, axis: 0.08 },
+  J: { rhythm: -0.12, structW: 0.18, perturb: -0.08, easeRatio: 0.08, count: -1, spread: -0.05 },
+  P: { rhythm: 0.16, structW: -0.10, perturb: 0.16, easeRatio: -0.08, count: 2, spread: 0.08 },
+};
+
+const MBTI_VARIANTS = [
+  { size: 0.05, count: 3, rhythm: 0.08, spread: 0.08, perturb: 0.06 },
+  { smoothW: 0.12, thick: 0.10, taper: 0.35, axis: -0.05 },
+  { structW: 0.14, axis: 0.10, boundW: 0.10, length: -0.06 },
+  { bendW: 0.18, perturb: 0.12, spread: -0.10, easeRatio: -0.06 },
+];
+
+const MBTI_DESCRIPTORS = {
+  I: '内倾',
+  E: '外倾',
+  N: '直觉',
+  S: '实感',
+  F: '情感',
+  T: '思考',
+  J: '判断',
+  P: '知觉',
+};
+
+const PERSONALITY_PARAM_KEYS = [
+  'easeRatio', 'size', 'axis', 'count', 'spread', 'length', 'thick',
+  'taper', 'rhythm', 'perturb', 'structW', 'bendW', 'boundW', 'smoothW'
+];
+
+const PERSONALITY_MODEL_LIBRARY = {
+  neutralCore:   { easeRatio:0.52, size:0.42, axis:0.50, count:11, spread:0.00, length:0.62, thick:0.42, taper:0.00, rhythm:0.50, perturb:0.34, structW:0.48, bendW:0.34, boundW:0.22, smoothW:0.46 },
+  inwardNest:    { easeRatio:0.72, size:0.62, axis:0.18, count:8,  spread:-0.52, length:0.42, thick:0.60, taper:0.70, rhythm:0.26, perturb:0.12, structW:0.78, bendW:0.18, boundW:0.52, smoothW:0.84 },
+  outwardBurst:  { easeRatio:0.28, size:0.24, axis:0.86, count:22, spread:0.62,  length:0.94, thick:0.26, taper:-0.92, rhythm:0.82, perturb:0.54, structW:0.16, bendW:0.76, boundW:0.12, smoothW:0.10 },
+  intuitiveMist: { easeRatio:0.36, size:0.34, axis:0.64, count:16, spread:0.20,  length:0.86, thick:0.28, taper:-0.30, rhythm:0.76, perturb:0.86, structW:0.18, bendW:0.72, boundW:0.36, smoothW:0.24 },
+  sensoryGrid:   { easeRatio:0.68, size:0.56, axis:0.34, count:12, spread:-0.14, length:0.48, thick:0.58, taper:0.26,  rhythm:0.34, perturb:0.10, structW:0.86, bendW:0.22, boundW:0.70, smoothW:0.72 },
+  feelingBloom:  { easeRatio:0.62, size:0.60, axis:0.40, count:13, spread:0.10,  length:0.66, thick:0.70, taper:0.82,  rhythm:0.48, perturb:0.26, structW:0.32, bendW:0.48, boundW:0.28, smoothW:0.88 },
+  thinkingSpine: { easeRatio:0.48, size:0.30, axis:0.68, count:15, spread:-0.08, length:0.70, thick:0.22, taper:-0.68, rhythm:0.42, perturb:0.22, structW:0.90, bendW:0.30, boundW:0.66, smoothW:0.08 },
+  judgingOrbit:  { easeRatio:0.78, size:0.46, axis:0.26, count:9,  spread:-0.38, length:0.54, thick:0.48, taper:0.20,  rhythm:0.18, perturb:0.08, structW:0.92, bendW:0.16, boundW:0.62, smoothW:0.74 },
+  perceivingScatter:{ easeRatio:0.24, size:0.26, axis:0.78, count:19, spread:0.50, length:0.90, thick:0.30, taper:-0.48, rhythm:0.88, perturb:0.70, structW:0.20, bendW:0.62, boundW:0.18, smoothW:0.18 },
+  bossBlade:     { easeRatio:0.44, size:0.22, axis:0.92, count:24, spread:-0.24, length:0.96, thick:0.18, taper:-1.10, rhythm:0.40, perturb:0.18, structW:0.84, bendW:0.24, boundW:0.74, smoothW:0.04 },
+  loverVelvet:   { easeRatio:0.74, size:0.68, axis:0.36, count:10, spread:0.14,  length:0.58, thick:0.78, taper:0.96,  rhythm:0.44, perturb:0.20, structW:0.22, bendW:0.54, boundW:0.20, smoothW:0.92 },
+  monkHalo:      { easeRatio:0.84, size:0.64, axis:0.12, count:6,  spread:-0.62, length:0.34, thick:0.54, taper:0.46,  rhythm:0.12, perturb:0.04, structW:0.80, bendW:0.10, boundW:0.40, smoothW:0.96 },
+  drunkWave:     { easeRatio:0.20, size:0.28, axis:0.66, count:17, spread:0.34,  length:0.82, thick:0.36, taper:-0.28, rhythm:0.92, perturb:0.94, structW:0.14, bendW:0.90, boundW:0.22, smoothW:0.06 },
+  jokerStatic:   { easeRatio:0.30, size:0.32, axis:0.74, count:21, spread:0.26,  length:0.72, thick:0.24, taper:-0.22, rhythm:0.84, perturb:1.00, structW:0.18, bendW:0.82, boundW:0.48, smoothW:0.02 },
+  deadQuiet:     { easeRatio:0.90, size:0.58, axis:0.08, count:4,  spread:-0.78, length:0.24, thick:0.44, taper:-0.06, rhythm:0.04, perturb:0.00, structW:0.72, bendW:0.02, boundW:0.26, smoothW:0.34 },
+  wildVine:      { easeRatio:0.34, size:0.38, axis:0.58, count:20, spread:0.42,  length:0.98, thick:0.34, taper:-0.56, rhythm:0.74, perturb:0.78, structW:0.10, bendW:0.88, boundW:0.30, smoothW:0.14 },
+  softShell:     { easeRatio:0.80, size:0.66, axis:0.20, count:7,  spread:-0.44, length:0.40, thick:0.68, taper:0.62,  rhythm:0.22, perturb:0.12, structW:0.54, bendW:0.22, boundW:0.34, smoothW:0.90 },
+  sharpRay:      { easeRatio:0.26, size:0.20, axis:0.88, count:26, spread:0.18,  length:1.00, thick:0.16, taper:-1.20, rhythm:0.56, perturb:0.16, structW:0.94, bendW:0.18, boundW:0.82, smoothW:0.00 },
+};
+
+const MBTI_MODEL_EFFECTS = {
+  I: 'inwardNest',
+  E: 'outwardBurst',
+  N: 'intuitiveMist',
+  S: 'sensoryGrid',
+  F: 'feelingBloom',
+  T: 'thinkingSpine',
+  J: 'judgingOrbit',
+  P: 'perceivingScatter',
+};
+
+const MBTI_VARIANT_MODEL_KEYS = ['softShell', 'sharpRay', 'wildVine', 'monkHalo', 'jokerStatic'];
+
+const SBTI_TYPE_ALIASES = {
+  CTRL: 'CTRL',
+  ATMER: 'ATM-er',
+  DIORS: 'Dior-s',
+  BOSS: 'BOSS',
+  THANK: 'THAN-K',
+  OHNO: 'OH-NO',
+  GOGO: 'GOGO',
+  SEXY: 'SEXY',
+  LOVER: 'LOVE-R',
+  MUM: 'MUM',
+  FAKE: 'FAKE',
+  OJBK: 'OJBK',
+  MALO: 'MALO',
+  JOKER: 'JOKE-R',
+  WOC: 'WOC!',
+  THINK: 'THIN-K',
+  SHIT: 'SHIT',
+  ZZZZ: 'ZZZZ',
+  POOR: 'POOR',
+  MONK: 'MONK',
+  IMSB: 'IMSB',
+  SOLO: 'SOLO',
+  FUCK: 'FUCK',
+  DEAD: 'DEAD',
+  IMFW: 'IMFW',
+  HHHH: 'HHHH',
+  DRUNK: 'DRUNK',
+};
+
+const SBTI_PROFILES = {
+  'CTRL':  { label: '拿捏者', patch: { axis: 0.22, structW: 0.18, smoothW: -0.08, count: 2, spread: -0.06, easeRatio: 0.06 } },
+  'ATM-er':{ label: '付出者', patch: { thick: 0.12, smoothW: 0.16, size: 0.08, boundW: 0.08, taper: 0.25 } },
+  'Dior-s':{ label: '嘴硬哲人', patch: { perturb: 0.10, structW: 0.10, smoothW: -0.06, bendW: 0.06, taper: -0.15 } },
+  'BOSS':  { label: '领导者', patch: { axis: 0.18, structW: 0.22, count: 3, spread: -0.12, easeRatio: 0.08 } },
+  'THAN-K':{ label: '感恩家', patch: { smoothW: 0.18, thick: 0.10, taper: 0.30, size: 0.05, boundW: 0.06 } },
+  'OH-NO': { label: '焦虑者', patch: { perturb: 0.18, rhythm: 0.10, spread: 0.14, boundW: 0.12, smoothW: -0.08 } },
+  'GOGO':  { label: '冲冲冲', patch: { count: 4, rhythm: 0.16, axis: 0.10, spread: 0.12, length: 0.08 } },
+  'SEXY':  { label: '万人迷', patch: { size: 0.12, thick: 0.14, smoothW: 0.10, taper: 0.22, bendW: 0.06 } },
+  'LOVE-R':{ label: '恋爱脑', patch: { smoothW: 0.20, thick: 0.12, taper: 0.40, size: 0.08, spread: 0.08 } },
+  'MUM':   { label: '妈妈型', patch: { smoothW: 0.18, thick: 0.16, boundW: 0.10, size: 0.06, count: -1 } },
+  'FAKE':  { label: '变脸王', patch: { perturb: 0.16, bendW: 0.14, rhythm: 0.10, axis: 0.08, smoothW: -0.10 } },
+  'OJBK':  { label: '无所谓', patch: { spread: 0.04, smoothW: 0.04, perturb: -0.02, structW: -0.04, rhythm: -0.02 } },
+  'MALO':  { label: '小猴子', patch: { perturb: 0.22, bendW: 0.18, count: 3, rhythm: 0.14, spread: 0.10 } },
+  'JOKE-R':{ label: '小丑', patch: { perturb: 0.24, rhythm: 0.18, bendW: 0.16, spread: 0.10, taper: -0.10 } },
+  'WOC!':  { label: '我测型', patch: { perturb: 0.26, spread: 0.18, boundW: 0.14, rhythm: 0.16, smoothW: -0.10 } },
+  'THIN-K':{ label: '思考者', patch: { structW: 0.18, smoothW: 0.08, count: -1, axis: 0.06, perturb: -0.06 } },
+  'SHIT':  { label: '愤世者', patch: { taper: -0.40, perturb: 0.14, smoothW: -0.16, boundW: 0.12, axis: 0.10 } },
+  'ZZZZ':  { label: '装死者', patch: { count: -3, rhythm: -0.18, size: 0.10, smoothW: 0.12, perturb: -0.12 } },
+  'POOR':  { label: '穷鬼专注者', patch: { count: -2, structW: 0.12, spread: -0.10, size: -0.04, smoothW: 0.06 } },
+  'MONK':  { label: '出家人', patch: { count: -3, spread: -0.16, smoothW: 0.20, perturb: -0.14, easeRatio: 0.06 } },
+  'IMSB':  { label: '自我攻击者', patch: { boundW: 0.16, perturb: 0.18, smoothW: -0.12, size: -0.06, taper: -0.18 } },
+  'SOLO':  { label: '独行侠', patch: { axis: -0.14, spread: -0.18, smoothW: 0.12, count: -2, size: 0.04 } },
+  'FUCK':  { label: '野生植物', patch: { perturb: 0.30, bendW: 0.22, spread: 0.16, taper: -0.24, count: 3 } },
+  'DEAD':  { label: '已死之人', patch: { count: -4, rhythm: -0.22, perturb: -0.18, smoothW: 0.04, size: -0.08 } },
+  'IMFW':  { label: '脆弱小花', patch: { size: 0.10, thick: 0.08, smoothW: 0.16, perturb: 0.12, taper: 0.16 } },
+  'HHHH':  { label: '笑晕者', patch: { rhythm: 0.22, perturb: 0.16, spread: 0.14, bendW: 0.14, smoothW: 0.04 } },
+  'DRUNK': { label: '酒蒙子', patch: { axis: 0.12, bendW: 0.24, perturb: 0.28, spread: 0.18, smoothW: -0.12 } },
+};
+
+const SBTI_VARIANTS = [
+  { perturb: 0.08, bendW: 0.08, spread: 0.08, rhythm: 0.06 },
+  { structW: 0.10, count: 2, axis: -0.06, boundW: 0.06 },
+  { smoothW: 0.10, thick: 0.08, taper: 0.24, size: 0.04 },
+  { easeRatio: -0.06, length: 0.08, spread: -0.08, count: -1 },
+];
+
+const SBTI_MODEL_MAP = {
+  'CTRL':   ['bossBlade', 'judgingOrbit'],
+  'ATM-er': ['loverVelvet', 'softShell'],
+  'Dior-s': ['thinkingSpine', 'sharpRay'],
+  'BOSS':   ['bossBlade', 'outwardBurst'],
+  'THAN-K': ['feelingBloom', 'softShell'],
+  'OH-NO':  ['jokerStatic', 'intuitiveMist'],
+  'GOGO':   ['outwardBurst', 'perceivingScatter'],
+  'SEXY':   ['loverVelvet', 'feelingBloom'],
+  'LOVE-R': ['loverVelvet', 'softShell'],
+  'MUM':    ['softShell', 'monkHalo'],
+  'FAKE':   ['jokerStatic', 'sharpRay'],
+  'OJBK':   ['neutralCore', 'sensoryGrid'],
+  'MALO':   ['wildVine', 'perceivingScatter'],
+  'JOKE-R': ['jokerStatic', 'outwardBurst'],
+  'WOC!':   ['jokerStatic', 'intuitiveMist'],
+  'THIN-K': ['thinkingSpine', 'judgingOrbit'],
+  'SHIT':   ['sharpRay', 'bossBlade'],
+  'ZZZZ':   ['deadQuiet', 'monkHalo'],
+  'POOR':   ['sensoryGrid', 'judgingOrbit'],
+  'MONK':   ['monkHalo', 'inwardNest'],
+  'IMSB':   ['deadQuiet', 'jokerStatic'],
+  'SOLO':   ['inwardNest', 'thinkingSpine'],
+  'FUCK':   ['wildVine', 'drunkWave'],
+  'DEAD':   ['deadQuiet', 'thinkingSpine'],
+  'IMFW':   ['softShell', 'feelingBloom'],
+  'HHHH':   ['outwardBurst', 'jokerStatic'],
+  'DRUNK':  ['drunkWave', 'wildVine'],
+};
+
+const SBTI_VARIANT_MODEL_KEYS = ['wildVine', 'jokerStatic', 'softShell', 'sharpRay', 'deadQuiet'];
 
 function renderQuestions() {
   const set = QUESTION_SETS[currentSetIdx];
-  const body = document.getElementById('q-body');
+  const body = document.getElementById('q-quiz-panel');
   body.innerHTML = set.map((q, i) => `
     <div class="q-item">
       <div class="q-label">${q.label}</div>
@@ -1043,6 +1499,9 @@ function renderQuestions() {
     </div>`).join('');
 }
 renderQuestions();
+handleMbtiInput('');
+handleSbtiInput('');
+setPersonalityMode('quiz');
 
 const TRACEBACK_SET = QUESTION_SETS[0];
 const TRACEBACK_MAPPING = MAPPINGS[0];
@@ -1164,12 +1623,257 @@ function selectOpt(el) {
   document.querySelectorAll(`.q-opt[data-q="${q}"]`).forEach(o => o.classList.remove('selected'));
   el.classList.add('selected');
   qAnswers[q] = el.dataset.v;
+  updatePersonalitySubmitState();
+}
+
+function updatePersonalitySubmitState() {
+  const btn = document.getElementById('btnSubmit');
+  const progress = document.getElementById('qProgress');
+
+  if (personalityMode === 'sbti') {
+    const sbti = resolveSbtiAlias(document.getElementById('sbtiInput').value);
+    const valid = !!sbti;
+    btn.disabled = !valid;
+    progress.innerHTML = valid
+      ? `已识别 <span>${sbti}</span>，提交后会生成一个新的专属变体`
+      : '请输入有效 SBTI，例如 <span>CTRL</span>、<span>BOSS</span>、<span>DRUNK</span>';
+    return;
+  }
+
+  if (personalityMode === 'mbti') {
+    const mbti = normalizeMbti(document.getElementById('mbtiInput').value);
+    const valid = isValidMbti(mbti);
+    btn.disabled = !valid;
+    progress.innerHTML = valid
+      ? `已识别 <span>${mbti}</span>，提交后会生成一个新的专属变体`
+      : '请输入 4 位有效 MBTI，例如 <span>INFJ</span>';
+    return;
+  }
+
   const cnt = Object.keys(qAnswers).length;
-  document.getElementById('qCount').textContent = cnt;
-  document.getElementById('btnSubmit').disabled = cnt < 6;
+  btn.disabled = cnt < 6;
+  progress.innerHTML = `已回答 <span>${cnt}</span> / 6 题`;
+}
+
+function setPersonalityMode(mode) {
+  personalityMode = mode === 'mbti' ? 'mbti' : mode === 'sbti' ? 'sbti' : 'quiz';
+  const isQuiz = personalityMode === 'quiz';
+  const isMbti = personalityMode === 'mbti';
+  const isSbti = personalityMode === 'sbti';
+
+  document.getElementById('qModeQuizBtn').classList.toggle('active', isQuiz);
+  document.getElementById('qModeMbtiBtn').classList.toggle('active', isMbti);
+  document.getElementById('qModeSbtiBtn').classList.toggle('active', isSbti);
+  document.getElementById('q-quiz-panel').classList.toggle('panel-hidden', !isQuiz);
+  document.getElementById('q-mbti-panel').classList.toggle('panel-hidden', !isMbti);
+  document.getElementById('q-sbti-panel').classList.toggle('panel-hidden', !isSbti);
+  document.getElementById('qSubtitle').textContent = isQuiz
+    ? '回答 6 个问题，生成专属形态'
+    : isMbti
+      ? '直接输入 MBTI，生成带随机差异的专属形态'
+      : '直接输入 SBTI，生成带随机差异的专属形态';
+
+  updatePersonalitySubmitState();
+}
+
+function normalizeMbti(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+}
+
+function isValidMbti(value) {
+  return /^[IE][NS][FT][JP]$/.test(value);
+}
+
+function handleMbtiInput(value) {
+  const input = document.getElementById('mbtiInput');
+  const help = document.getElementById('mbtiHelp');
+  const mbti = normalizeMbti(value);
+  input.value = mbti;
+
+  if (!mbti) {
+    help.textContent = '支持 16 型 MBTI，例如 INFJ、ENTP、ISFP。';
+  } else if (isValidMbti(mbti)) {
+    help.textContent = `${mbti} · ${mbti.split('').map(letter => MBTI_DESCRIPTORS[letter]).join(' / ')}。同一 MBTI 每次提交也会生成不同变体。`;
+  } else {
+    help.textContent = '格式应为 4 位 MBTI，例如 INFJ、ENFP、ISTP。';
+  }
+
+  updatePersonalitySubmitState();
+}
+
+function normalizeSbtiKey(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function resolveSbtiAlias(value) {
+  const key = normalizeSbtiKey(value);
+  return SBTI_TYPE_ALIASES[key] || '';
+}
+
+function handleSbtiInput(value) {
+  const input = document.getElementById('sbtiInput');
+  const help = document.getElementById('sbtiHelp');
+  const resolved = resolveSbtiAlias(value);
+  input.value = String(value || '').toUpperCase();
+
+  if (!normalizeSbtiKey(value)) {
+    help.textContent = '支持 27 型 SBTI，例如 CTRL、BOSS、DRUNK、OJBK、LOVE-R。';
+  } else if (resolved) {
+    help.textContent = `${resolved} · ${SBTI_PROFILES[resolved].label}。同一 SBTI 每次提交也会生成不同变体。`;
+  } else {
+    help.textContent = '暂未识别这个 SBTI。可输入 CTRL、ATM-er、Dior-s、BOSS、THAN-K、OH-NO、DRUNK 等。';
+  }
+
+  updatePersonalitySubmitState();
+}
+
+function addPersonalityPatch(target, patch) {
+  Object.keys(patch).forEach(key => {
+    target[key] = (target[key] ?? 0) + patch[key];
+  });
+}
+
+function buildPersonalityModel(specs) {
+  const totals = {};
+  let totalWeight = 0;
+
+  PERSONALITY_PARAM_KEYS.forEach(key => { totals[key] = 0; });
+
+  specs.forEach(spec => {
+    if (!spec) return;
+    const model = PERSONALITY_MODEL_LIBRARY[spec.key];
+    const weight = spec.weight ?? 1;
+    if (!model || weight <= 0) return;
+    totalWeight += weight;
+    PERSONALITY_PARAM_KEYS.forEach(key => {
+      totals[key] += (model[key] ?? 0) * weight;
+    });
+  });
+
+  if (totalWeight <= 0) {
+    return Object.assign({}, PERSONALITY_MODEL_LIBRARY.neutralCore);
+  }
+
+  const out = {};
+  PERSONALITY_PARAM_KEYS.forEach(key => {
+    out[key] = totals[key] / totalWeight;
+  });
+  return out;
+}
+
+function finalizePersonalityParams(params, jitterScale) {
+  function vary(key, fallback, amount) {
+    const base = params[key] ?? fallback;
+    return base + (Math.random() - 0.5) * amount * 2 * jitterScale;
+  }
+
+  return {
+    easeRatio: clamp(vary('easeRatio', 0.5, 0.10), 0.06, 0.97),
+    size:      clamp(vary('size',      0.4, 0.10), 0,    1),
+    axis:      clamp(vary('axis',      0.5, 0.16), 0,    1),
+    count:     Math.round(clamp(vary('count', 10, 4.5), 2, 40)),
+    spread:    clamp(vary('spread',    0,   0.18), -1,   1),
+    length:    clamp(vary('length',    0.6, 0.11), 0,    1),
+    thick:     clamp(vary('thick',     0.4, 0.10), 0,    1),
+    taper:     clamp(vary('taper',     0,   0.52), -2,   2),
+    rhythm:    clamp(vary('rhythm',    0.5, 0.16), 0,    1),
+    perturb:   clamp(vary('perturb',   0.4, 0.18), 0,    1),
+    structW:   clamp(vary('structW',   0.5, 0.16), 0,    1),
+    bendW:     clamp(vary('bendW',     0.3, 0.17), 0,    1),
+    boundW:    clamp(vary('boundW',    0.2, 0.14), 0,    1),
+    smoothW:   clamp(vary('smoothW',   0.3, 0.14), 0,    1),
+  };
+}
+
+function buildMbtiParams(mbti) {
+  const params = buildPersonalityModel([
+    { key: 'neutralCore', weight: 0.7 },
+    { key: MBTI_MODEL_EFFECTS[mbti[0]], weight: 1.1 },
+    { key: MBTI_MODEL_EFFECTS[mbti[1]], weight: 1.0 },
+    { key: MBTI_MODEL_EFFECTS[mbti[2]], weight: 0.95 },
+    { key: MBTI_MODEL_EFFECTS[mbti[3]], weight: 1.0 },
+    { key: MBTI_VARIANT_MODEL_KEYS[Math.floor(Math.random() * MBTI_VARIANT_MODEL_KEYS.length)], weight: 0.38 },
+  ]);
+
+  mbti.split('').forEach(letter => addPersonalityPatch(params, MBTI_LETTER_EFFECTS[letter] || {}));
+  addPersonalityPatch(params, MBTI_VARIANTS[Math.floor(Math.random() * MBTI_VARIANTS.length)]);
+  return finalizePersonalityParams(params, 0.95);
+}
+
+function buildSbtiParams(sbti) {
+  const profile = SBTI_PROFILES[sbti];
+  const modelKeys = SBTI_MODEL_MAP[sbti] || ['neutralCore', 'perceivingScatter'];
+  const params = buildPersonalityModel([
+    { key: 'neutralCore', weight: 0.55 },
+    { key: modelKeys[0], weight: 1.15 },
+    { key: modelKeys[1], weight: 0.80 },
+    { key: SBTI_VARIANT_MODEL_KEYS[Math.floor(Math.random() * SBTI_VARIANT_MODEL_KEYS.length)], weight: 0.42 },
+  ]);
+
+  addPersonalityPatch(params, profile ? profile.patch : {});
+  addPersonalityPatch(params, SBTI_VARIANTS[Math.floor(Math.random() * SBTI_VARIANTS.length)]);
+  return finalizePersonalityParams(params, 1.05);
+}
+
+function applyPersonalityParams(params) {
+  const easeVal = eMin + (eMax - eMin) * clamp(params.easeRatio ?? 0.5, 0, 1);
+
+  window._setSlider(slEase,    'valEase',    clamp(easeVal,              eMin, eMax));
+  window._setSlider(slSize,    'valSize',    clamp(params.size    ?? 0.4, 0,   1   ));
+  window._setSlider(slAxis,    'valAxis',    clamp(params.axis    ?? 0.5, 0,   1   ));
+  window._setSlider(slCount,   'valCount',   Math.round(clamp(params.count ?? 10, 2, 40)));
+  window._setSlider(slSpread,  'valSpread',  clamp(params.spread  ?? 0,  -1,   1   ));
+  window._setSlider(slLength,  'valLength',  clamp(params.length  ?? 0.6, 0,   1   ));
+  window._setSlider(slThick,   'valThick',   clamp(params.thick   ?? 0.4, 0,   1   ));
+  window._setSlider(slTaper,   'valTaper',   clamp(params.taper   ?? 0,  -2,   2   ));
+  window._setSlider(slRhythm,  'valRhythm',  clamp(params.rhythm  ?? 0.5, 0,   1   ));
+  window._setSlider(slPerturb, 'valPerturb', clamp(params.perturb ?? 0.4, 0,   1   ));
+  window._setSlider(slStructW, 'valStructW', clamp(params.structW ?? 0.5, 0,   1   ));
+  window._setSlider(slBendW,   'valBendW',   clamp(params.bendW   ?? 0.3, 0,   1   ));
+  window._setSlider(slBoundW,  'valBoundW',  clamp(params.boundW  ?? 0.2, 0,   1   ));
+  window._setSlider(slSmoothW, 'valSmoothW', clamp(params.smoothW ?? 0.3, 0,   1   ));
+
+  stopPlayback();
+  if (window._redraw) window._redraw();
+}
+
+function resetPersonalityGenerator() {
+  document.querySelectorAll('.q-opt.selected').forEach(o => o.classList.remove('selected'));
+  Object.keys(qAnswers).forEach(k => delete qAnswers[k]);
+  currentSetIdx = Math.floor(Math.random() * 3);
+  renderQuestions();
+  handleMbtiInput('');
+  handleSbtiInput('');
+  updatePersonalitySubmitState();
 }
 
 function submitPersonality() {
+  if (personalityMode === 'sbti') {
+    const sbti = resolveSbtiAlias(document.getElementById('sbtiInput').value);
+    if (!sbti) {
+      updatePersonalitySubmitState();
+      return;
+    }
+
+    applyPersonalityParams(buildSbtiParams(sbti));
+    resetPersonalityGenerator();
+    closeQuestionnaire();
+    return;
+  }
+
+  if (personalityMode === 'mbti') {
+    const mbti = normalizeMbti(document.getElementById('mbtiInput').value);
+    if (!isValidMbti(mbti)) {
+      updatePersonalitySubmitState();
+      return;
+    }
+
+    applyPersonalityParams(buildMbtiParams(mbti));
+    resetPersonalityGenerator();
+    closeQuestionnaire();
+    return;
+  }
+
   // 随机选择映射模式
   const mappingMode = Math.floor(Math.random() * 3);
   const mapping = MAPPINGS[mappingMode];
@@ -1181,39 +1885,28 @@ function submitPersonality() {
     Object.assign(params, mapping[i][v]);
   }
 
-  // easeRatio → 实际 ease 值
-  const easeVal = eMin + (eMax - eMin) * (params.easeRatio ?? 0.5);
-
   // 随机扰动 ±8%
   function jitter(v) { return v * (1 + (Math.random() - 0.5) * 0.16); }
   function jitterClamped(v, lo, hi) { return Math.max(lo, Math.min(hi, jitter(v))); }
 
-  window._setSlider(slEase,    'valEase',    jitterClamped(easeVal,              eMin, eMax));
-  window._setSlider(slSize,    'valSize',    jitterClamped(params.size    ?? 0.4, 0,   1   ));
-  window._setSlider(slAxis,    'valAxis',    jitterClamped(params.axis    ?? 0.5, 0,   1   ));
-  window._setSlider(slCount,   'valCount',   Math.round(jitterClamped(params.count  ?? 10,  0,  40  )));
-  window._setSlider(slSpread,  'valSpread',  jitterClamped(params.spread  ?? 0,  -1,   1   ));
-  window._setSlider(slLength,  'valLength',  jitterClamped(params.length  ?? 0.6, 0,   1   ));
-  window._setSlider(slThick,   'valThick',   jitterClamped(params.thick   ?? 0.4, 0,   1   ));
-  window._setSlider(slTaper,   'valTaper',   jitterClamped(params.taper   ?? 0,  -2,   2   ));
-  window._setSlider(slRhythm,  'valRhythm',  jitterClamped(params.rhythm  ?? 0.5, 0,   1   ));
-  window._setSlider(slPerturb, 'valPerturb', jitterClamped(params.perturb ?? 0.4, 0,   1   ));
-  window._setSlider(slStructW, 'valStructW', jitterClamped(params.structW ?? 0.5, 0,   1   ));
-  window._setSlider(slBendW,   'valBendW',   jitterClamped(params.bendW   ?? 0.3, 0,   1   ));
-  window._setSlider(slBoundW,  'valBoundW',  jitterClamped(params.boundW  ?? 0.2, 0,   1   ));
-  window._setSlider(slSmoothW, 'valSmoothW', jitterClamped(params.smoothW ?? 0.3, 0,   1   ));
+  applyPersonalityParams({
+    easeRatio: jitterClamped(params.easeRatio ?? 0.5, 0, 1),
+    size:      jitterClamped(params.size      ?? 0.4, 0, 1),
+    axis:      jitterClamped(params.axis      ?? 0.5, 0, 1),
+    count:     Math.round(jitterClamped(params.count ?? 10, 2, 40)),
+    spread:    jitterClamped(params.spread    ?? 0,  -1, 1),
+    length:    jitterClamped(params.length    ?? 0.6, 0, 1),
+    thick:     jitterClamped(params.thick     ?? 0.4, 0, 1),
+    taper:     jitterClamped(params.taper     ?? 0,  -2, 2),
+    rhythm:    jitterClamped(params.rhythm    ?? 0.5, 0, 1),
+    perturb:   jitterClamped(params.perturb   ?? 0.4, 0, 1),
+    structW:   jitterClamped(params.structW   ?? 0.5, 0, 1),
+    bendW:     jitterClamped(params.bendW     ?? 0.3, 0, 1),
+    boundW:    jitterClamped(params.boundW    ?? 0.2, 0, 1),
+    smoothW:   jitterClamped(params.smoothW   ?? 0.3, 0, 1),
+  });
 
-  // 停止动画，定格形态
-  stopPlayback();
-  if (window._redraw) window._redraw();
-
-  // 重置问卷，随机切换下一套题库
-  document.querySelectorAll('.q-opt.selected').forEach(o => o.classList.remove('selected'));
-  Object.keys(qAnswers).forEach(k => delete qAnswers[k]);
-  document.getElementById('qCount').textContent = '0';
-  document.getElementById('btnSubmit').disabled = true;
-  currentSetIdx = Math.floor(Math.random() * 3);
-  renderQuestions();
+  resetPersonalityGenerator();
   closeQuestionnaire();
 }
 // ── 花瓣参数 ──────────────────────────────────────────────────
