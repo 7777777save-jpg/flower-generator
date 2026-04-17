@@ -119,19 +119,14 @@
       padding: 9px 0;
       border: none; border-radius: 6px;
       font-size: 12px; letter-spacing: .06em;
-      cursor: pointer; transition: background .15s;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      background: #f0f0f0;
+      color: #333;
     }
-    #btnAnim, #btnExport, #btnRandom {
-      background: #f0f0f0; color: #333;
-    }
-    #btnAnim:hover, #btnExport:hover, #btnRandom:hover {
-      background: #ddd;
-    }
-    #btnTest, #btnPattern, #btnTrace {
-      background: #1a1a1a; color: #fff;
-    }
+    #btnAnim:hover, #btnExport:hover, #btnRandom:hover,
     #btnTest:hover, #btnPattern:hover, #btnTrace:hover {
-      background: #444;
+      background: #ddd;
     }
     #info {
       font-size: 10px; color: #ccc; text-align: center;
@@ -778,7 +773,7 @@
       <button id="btnAnim" onclick="toggleAnim()">▶ 播放</button>
       <button id="btnRandom" onclick="randomize()">⚄ 随机</button>
       <button id="btnTest" onclick="openQuestionnaire()">测试</button>
-      <button id="btnExport" onclick="exportPNG()">导出 PNG</button>
+      <button id="btnExport" onclick="exportPNG()">打印</button>
       <button id="btnTrace" onclick="openTraceback()" style="grid-column:1/-1;">回溯人格</button>
       <button id="btnPattern" onclick="openPattern()" style="grid-column:1/-1;">图案化</button>
     </div>
@@ -955,11 +950,15 @@ function randomize() {
 // 导出 PNG
 const AUTO_PRINT_SERVICE_URL =
   window.location.protocol === 'file:' ? 'http://127.0.0.1:3210' : window.location.origin;
+const DISPLAY_CANVAS_SIZE = 520;
 const EXPORT_SIZE_MM = 50;
-const EXPORT_DPI = 203;
-const EXPORT_SIZE_PX = Math.round((EXPORT_SIZE_MM / 25.4) * EXPORT_DPI);
+const PRINT_LABEL_SIZE_MM = 60;
+const PRINT_DPI = 203;
+const EXPORT_DOWNLOAD_DPI = 600;
+const PRINT_ARTWORK_SIZE_PX = Math.round((EXPORT_SIZE_MM / 25.4) * PRINT_DPI);
+const PRINT_LABEL_SIZE_PX = Math.round((PRINT_LABEL_SIZE_MM / 25.4) * PRINT_DPI);
+const EXPORT_DOWNLOAD_PX = Math.round((EXPORT_SIZE_MM / 25.4) * EXPORT_DOWNLOAD_DPI);
 const EXPORT_PADDING_RATIO = 0.04;
-const PRINT_BLEED_SCALE = 1.06;
 
 function setExportStatus(message, isError = false) {
   const info = document.getElementById('info');
@@ -975,7 +974,7 @@ function downloadPNG(dataUrl) {
   a.click();
 }
 
-function findArtworkBounds(sourceCanvas) {
+function findArtworkBounds(sourceCanvas, paddingRatio = EXPORT_PADDING_RATIO) {
   const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
   const { width, height } = sourceCanvas;
   const pixels = ctx.getImageData(0, 0, width, height).data;
@@ -1009,8 +1008,8 @@ function findArtworkBounds(sourceCanvas) {
   const contentWidth = maxX - minX + 1;
   const contentHeight = maxY - minY + 1;
   const padding = Math.max(
-    2,
-    Math.round(Math.max(contentWidth, contentHeight) * EXPORT_PADDING_RATIO)
+    0,
+    Math.round(Math.max(contentWidth, contentHeight) * paddingRatio)
   );
 
   return {
@@ -1021,20 +1020,20 @@ function findArtworkBounds(sourceCanvas) {
   };
 }
 
-function buildExportCanvas(sourceCanvas) {
+function buildRasterExportCanvas(sourceCanvas, targetPx) {
   const exportCanvas = document.createElement('canvas');
-  exportCanvas.width = EXPORT_SIZE_PX;
-  exportCanvas.height = EXPORT_SIZE_PX;
+  exportCanvas.width = targetPx;
+  exportCanvas.height = targetPx;
 
   const ctx = exportCanvas.getContext('2d');
-  const bounds = findArtworkBounds(sourceCanvas);
-  const scale = Math.min(EXPORT_SIZE_PX / bounds.width, EXPORT_SIZE_PX / bounds.height);
+  const bounds = findArtworkBounds(sourceCanvas, EXPORT_PADDING_RATIO);
+  const scale = Math.min(targetPx / bounds.width, targetPx / bounds.height);
   const drawWidth = bounds.width * scale;
   const drawHeight = bounds.height * scale;
-  const offsetX = (EXPORT_SIZE_PX - drawWidth) / 2;
-  const offsetY = (EXPORT_SIZE_PX - drawHeight) / 2;
+  const offsetX = (targetPx - drawWidth) / 2;
+  const offsetY = (targetPx - drawHeight) / 2;
 
-  ctx.clearRect(0, 0, EXPORT_SIZE_PX, EXPORT_SIZE_PX);
+  ctx.clearRect(0, 0, targetPx, targetPx);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(
@@ -1052,21 +1051,84 @@ function buildExportCanvas(sourceCanvas) {
   return exportCanvas;
 }
 
+function buildVectorExportCanvas() {
+  if (!mainP5 || !sharedDrawPetals || !sharedDrawCore || !sharedDrawStamens) {
+    return null;
+  }
+
+  const exportGraphics = mainP5.createGraphics(EXPORT_DOWNLOAD_PX, EXPORT_DOWNLOAD_PX);
+  if (!exportGraphics) return null;
+  if (typeof exportGraphics.pixelDensity === 'function') exportGraphics.pixelDensity(1);
+
+  const scale = EXPORT_DOWNLOAD_PX / DISPLAY_CANVAS_SIZE;
+  const ease = sliderUiToActual(slEase);
+  const sizeFac = sliderUiToActual(slSize);
+  const axis = sliderUiToActual(slAxis);
+  const count = sliderUiToActual(slCount);
+  const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
+  const field = buildCoreField(ease, sizeFac, axis, structAmt, boundAmt, smoothAmt, count);
+
+  exportGraphics.background(255);
+  exportGraphics.push();
+  exportGraphics.scale(scale);
+  sharedDrawPetals(exportGraphics, ease);
+  sharedDrawCore(exportGraphics, DISPLAY_CANVAS_SIZE / 2, DISPLAY_CANVAS_SIZE / 2, field, smoothAmt, 255, true);
+  sharedDrawStamens(
+    exportGraphics,
+    DISPLAY_CANVAS_SIZE / 2,
+    DISPLAY_CANVAS_SIZE / 2,
+    field,
+    sizeFac,
+    smoothAmt,
+    bendAmt,
+    boundAmt,
+    255,
+    count,
+    sliderUiToActual(slLength),
+    sliderUiToActual(slThick),
+    sliderUiToActual(slTaper),
+    sliderUiToActual(slRhythm),
+    sliderUiToActual(slSpread),
+    true
+  );
+  exportGraphics.pop();
+
+  return exportGraphics.canvas;
+}
+
+function buildExportCanvas(sourceCanvas) {
+  return buildVectorExportCanvas() || buildRasterExportCanvas(sourceCanvas, EXPORT_DOWNLOAD_PX);
+}
+
 function buildPrinterDataUrl(sourceCanvas) {
   const printerCanvas = document.createElement('canvas');
-  printerCanvas.width = EXPORT_SIZE_PX;
-  printerCanvas.height = EXPORT_SIZE_PX;
+  printerCanvas.width = PRINT_LABEL_SIZE_PX;
+  printerCanvas.height = PRINT_LABEL_SIZE_PX;
 
   const ctx = printerCanvas.getContext('2d');
-  const drawWidth = EXPORT_SIZE_PX * PRINT_BLEED_SCALE;
-  const drawHeight = EXPORT_SIZE_PX * PRINT_BLEED_SCALE;
-  const offsetX = (printerCanvas.width - drawWidth) / 2;
-  const offsetY = (printerCanvas.height - drawHeight) / 2;
+  const drawSize = PRINT_ARTWORK_SIZE_PX;
+  const offset = (PRINT_LABEL_SIZE_PX - drawSize) / 2;
+  const bounds = findArtworkBounds(sourceCanvas, 0);
+  const scale = Math.min(drawSize / bounds.width, drawSize / bounds.height);
+  const drawWidth = bounds.width * scale;
+  const drawHeight = bounds.height * scale;
+  const drawX = offset + (drawSize - drawWidth) / 2;
+  const drawY = offset + (drawSize - drawHeight) / 2;
 
   ctx.clearRect(0, 0, printerCanvas.width, printerCanvas.height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(sourceCanvas, offsetX, offsetY, drawWidth, drawHeight);
+  ctx.drawImage(
+    sourceCanvas,
+    bounds.x,
+    bounds.y,
+    bounds.width,
+    bounds.height,
+    drawX,
+    drawY,
+    drawWidth,
+    drawHeight
+  );
 
   return printerCanvas.toDataURL('image/png');
 }
@@ -1111,22 +1173,19 @@ async function exportPNG() {
   const originalLabel = exportButton.textContent;
   exportButton.disabled = true;
   exportButton.textContent = '处理中...';
-  setExportStatus(`正在生成 ${EXPORT_SIZE_MM}mm × ${EXPORT_SIZE_MM}mm PNG，并发送到自动打印程序...`);
+  setExportStatus(`正在生成打印图，并发送到自动打印程序...`);
 
   try {
-    const exportCanvas = buildExportCanvas(canvas);
-    const imageDataUrl = exportCanvas.toDataURL('image/png');
-    const printerDataUrl = buildPrinterDataUrl(exportCanvas);
-    downloadPNG(imageDataUrl);
+    const printerDataUrl = buildPrinterDataUrl(canvas);
 
     exportButton.textContent = '发送打印中...';
-    setExportStatus('5cm × 5cm PNG 已导出，正在交给打印程序自动居中并按 5cm 输出...');
+    setExportStatus('正在交给打印程序自动居中并按当前标签配置输出...');
 
     const result = await sendPNGToAutoPrinter(printerDataUrl);
-    setExportStatus(`已导出并发送到 ${result.printer}，打印程序正在按 5cm × 5cm 自动打印。`);
+    setExportStatus(`已发送到 ${result.printer} 自动打印。`);
   } catch (error) {
     console.error(error);
-    setExportStatus(`PNG 已导出，但自动打印失败：${error.message}`, true);
+    setExportStatus(`打印失败：${error.message}`, true);
   } finally {
     exportButton.disabled = false;
     exportButton.textContent = originalLabel;
@@ -2054,6 +2113,7 @@ function subdivide(pts, closed) {
 
 // 花蕊离屏缓冲（融合用）
 let stamenBuf = null;
+let sharedDrawPetals = null;
 let sharedDrawCore = null;
 let sharedDrawStamens = null;
 let sharedBuildCorePolygon = null;
@@ -2486,43 +2546,46 @@ let mainP5 = new p5(function(p) {
   window._setSlider = setSlider;
 
   // ── 花瓣外轮廓 ────────────────────────────────────────────
-  function drawPetals(ease) {
+  function drawPetals(pInst, ease) {
     const { rPetal: r, dOrbit } = computePetalGeom(ease);
     const pos = Array.from({ length: N }, (_, i) => {
-      const a = p.TWO_PI / N * i - p.HALF_PI;
-      return p.createVector(p.width/2 + Math.cos(a)*dOrbit, p.height/2 + Math.sin(a)*dOrbit);
+      const a = pInst.TWO_PI / N * i - pInst.HALF_PI;
+      return {
+        x: pInst.width / 2 + Math.cos(a) * dOrbit,
+        y: pInst.height / 2 + Math.sin(a) * dOrbit
+      };
     });
 
-    p.noStroke(); p.fill(20);
-    for (let i = 0; i < N; i++) p.ellipse(pos[i].x, pos[i].y, r*2, r*2);
+    pInst.noStroke(); pInst.fill(20);
+    for (let i = 0; i < N; i++) pInst.ellipse(pos[i].x, pos[i].y, r * 2, r * 2);
 
     // 填充花瓣之间的中心空洞：以圆心为中心画一个内切多边形覆盖空隙
-    p.beginShape();
+    pInst.beginShape();
     for (let i = 0; i < N; i++) {
-      const a = p.TWO_PI / N * i - p.HALF_PI;
-      p.vertex(p.width/2 + Math.cos(a)*dOrbit, p.height/2 + Math.sin(a)*dOrbit);
+      const a = pInst.TWO_PI / N * i - pInst.HALF_PI;
+      pInst.vertex(pInst.width / 2 + Math.cos(a) * dOrbit, pInst.height / 2 + Math.sin(a) * dOrbit);
     }
-    p.endShape(p.CLOSE);
+    pInst.endShape(pInst.CLOSE);
 
-    p.noFill(); p.stroke(20); p.strokeWeight(1.8);
-    if (dOrbit < 1) { p.ellipse(p.width/2, p.height/2, r*2, r*2); return; }
+    pInst.noFill(); pInst.stroke(20); pInst.strokeWeight(1.8);
+    if (dOrbit < 1) { pInst.ellipse(pInst.width / 2, pInst.height / 2, r * 2, r * 2); return; }
 
     for (let i = 0; i < N; i++) {
       const cx = pos[i].x, cy = pos[i].y;
-      const iCW = (i+1)%N, iCCW = (i-1+N)%N;
-      const dxCW  = pos[iCW].x-cx,  dyCW  = pos[iCW].y-cy;
-      const dxCCW = pos[iCCW].x-cx, dyCCW = pos[iCCW].y-cy;
+      const iCW = (i + 1) % N, iCCW = (i - 1 + N) % N;
+      const dxCW  = pos[iCW].x - cx,  dyCW  = pos[iCW].y - cy;
+      const dxCCW = pos[iCCW].x - cx, dyCCW = pos[iCCW].y - cy;
       const d = Math.hypot(dxCW, dyCW);
-      const alpha = Math.acos(Math.min(1, d/(2*r)));
+      const alpha = Math.acos(Math.min(1, d / (2 * r)));
       let s = Math.atan2(dyCCW, dxCCW) + alpha;
-      let e = Math.atan2(dyCW,  dxCW ) - alpha;
+      let e = Math.atan2(dyCW, dxCW) - alpha;
       while (e <= s) e += p.TWO_PI;
-      p.arc(cx, cy, r*2, r*2, s, e, p.OPEN);
+      pInst.arc(cx, cy, r * 2, r * 2, s, e, pInst.OPEN);
     }
   }
 
-  function drawCore(pInst, cx, cy, field, smoothAmt, fillColor) {
-    const pts = buildCorePolygon(cx, cy, field, smoothAmt, false);
+  function drawCore(pInst, cx, cy, field, smoothAmt, fillColor, highQuality = false) {
+    const pts = buildCorePolygon(cx, cy, field, smoothAmt, highQuality);
 
     pInst.fill(fillColor); pInst.noStroke();
     pInst.beginShape();
@@ -2535,10 +2598,10 @@ let mainP5 = new p5(function(p) {
 
   // ── 放射结构：路径 + 宽度函数 ──────────────────────────────────
   function drawStamens(pInst, cx, cy, field, sizeFac, smoothAmt, bendAmt, boundAmt, fillColor,
-                        count, lenFac, thickFac, taper, rhythm, spread) {
+                        count, lenFac, thickFac, taper, rhythm, spread, highQuality = false) {
     const shapes = buildStamenShapes(
       cx, cy, field, sizeFac, smoothAmt, bendAmt, boundAmt,
-      count, lenFac, thickFac, taper, rhythm, spread, false
+      count, lenFac, thickFac, taper, rhythm, spread, highQuality
     );
     if (shapes.length === 0) return;
 
@@ -2554,6 +2617,7 @@ let mainP5 = new p5(function(p) {
     }
   }
 
+  sharedDrawPetals = drawPetals;
   sharedDrawCore = drawCore;
   sharedDrawStamens = drawStamens;
   sharedBuildCorePolygon = buildCorePolygon;
@@ -2592,7 +2656,7 @@ let mainP5 = new p5(function(p) {
     const { structAmt, bendAmt, boundAmt, smoothAmt } = getPerturbAmounts();
     const field = buildCoreField(ease, sizeFac, axis, structAmt, boundAmt, smoothAmt, count);
 
-    drawPetals(ease);
+    drawPetals(p, ease);
     drawCore(p, p.width/2, p.height/2, field, smoothAmt, 255);
     drawStamens(p, p.width/2, p.height/2, field, sizeFac, smoothAmt, bendAmt, boundAmt, 255,
       count,
